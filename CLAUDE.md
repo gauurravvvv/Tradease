@@ -1,4 +1,4 @@
-# TradeOracle
+# Tradease
 
 AI-powered Indian F&O trading decision system. Uses Claude Code CLI as analysis engine.
 
@@ -25,15 +25,15 @@ AI-powered Indian F&O trading decision system. Uses Claude Code CLI as analysis 
 
 ## Commands
 
-- `tradeoracle scan` — Pre-market scan, find top trades
-- `tradeoracle research quick <SYMBOL>` — Quick analysis
-- `tradeoracle research deep <SYMBOL>` — Deep analysis
-- `tradeoracle portfolio` — View portfolio + P&L
-- `tradeoracle trades` — Active trades with live P&L
-- `tradeoracle exit <SYMBOL>` — Manual exit position
-- `tradeoracle history` — Past trades + win rate + performance stats
-- `tradeoracle pulse` — Quick market pulse
-- `tradeoracle daemon` — Start 24x7 daemon with all schedulers
+- `tradease scan` — Pre-market scan, find top trades
+- `tradease research quick <SYMBOL>` — Quick analysis
+- `tradease research deep <SYMBOL>` — Deep analysis
+- `tradease portfolio` — View portfolio + P&L
+- `tradease trades` — Active trades with live P&L
+- `tradease exit <SYMBOL>` — Manual exit position
+- `tradease history` — Past trades + win rate + performance stats
+- `tradease pulse` — Quick market pulse
+- `tradease daemon` — Start 24x7 daemon with all schedulers
 
 ## Code Style
 

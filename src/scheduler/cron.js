@@ -2,7 +2,7 @@ import cron from 'node-cron';
 import { SCHEDULE } from '../config/settings.js';
 
 /**
- * Cron job scheduler for TradeOracle daemon.
+ * Cron job scheduler for Tradease daemon.
  */
 export class Scheduler {
   constructor() {
@@ -58,7 +58,7 @@ export class Scheduler {
   }
 
   /**
-   * Register all standard TradeOracle jobs.
+   * Register all standard Tradease jobs.
    *
    * @param {object} handlers - Object with handler functions:
    *   { preMarketScan, marketOpenCheck, tradeExecution, marketPulse, positionMonitor, windDown, postMarket }

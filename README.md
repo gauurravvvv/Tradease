@@ -1,4 +1,4 @@
-# TradeOracle
+# Tradease
 
 AI-powered Indian F&O (Futures & Options) paper trading system. Uses Claude as the analysis engine, Yahoo Finance for market data, and technical indicators to generate, execute, and monitor trade ideas — all from the terminal.
 
@@ -25,8 +25,8 @@ AI-powered Indian F&O (Futures & Options) paper trading system. Uses Claude as t
 
 ```bash
 # Clone the repo
-git clone <your-repo-url> TradeOracle
-cd TradeOracle
+git clone <your-repo-url> Tradease
+cd Tradease
 
 # Install dependencies
 npm install
@@ -35,37 +35,37 @@ npm install
 npm link
 ```
 
-After `npm link`, you can use `tradeoracle` from anywhere. Without it, use `node src/index.js` instead.
+After `npm link`, you can use `tradease` from anywhere. Without it, use `node src/index.js` instead.
 
 ## Quick Start
 
 ```bash
 # Run a pre-market scan
-tradeoracle scan
+tradease scan
 
 # Quick research on a stock
-tradeoracle research RELIANCE
+tradease research RELIANCE
 
 # Deep research with options + 90-day history
-tradeoracle research deep RELIANCE
+tradease research deep RELIANCE
 
 # Check market pulse
-tradeoracle pulse
+tradease pulse
 
 # Start the daemon (runs everything on schedule)
-tradeoracle daemon
+tradease daemon
 ```
 
 ## Commands
 
-### `tradeoracle scan`
+### `tradease scan`
 
 Run pre-market screening and AI analysis. Displays a morning brief with top trade ideas.
 
 ```bash
-tradeoracle scan                  # Interactive — prompts for action
-tradeoracle scan --no-interactive # Non-interactive (daemon mode)
-tradeoracle scan -n 20            # Screen top 20 stocks (default: 15)
+tradease scan                  # Interactive — prompts for action
+tradease scan --no-interactive # Non-interactive (daemon mode)
+tradease scan -n 20            # Screen top 20 stocks (default: 15)
 ```
 
 **Interactive actions after scan:**
@@ -74,54 +74,54 @@ tradeoracle scan -n 20            # Screen top 20 stocks (default: 15)
 - `D1-DN` — Deep research a specific stock
 - `S` — Skip (no trades)
 
-### `tradeoracle research <symbol>`
+### `tradease research <symbol>`
 
 Analyze a single stock. Two modes:
 
 ```bash
 # Quick analysis — current price, technicals, news
-tradeoracle research RELIANCE
-tradeoracle research quick RELIANCE
+tradease research RELIANCE
+tradease research quick RELIANCE
 
 # Deep analysis — 90-day history, options chain, full context
-tradeoracle research deep RELIANCE
-tradeoracle research RELIANCE --deep
+tradease research deep RELIANCE
+tradease research RELIANCE --deep
 ```
 
 Deep mode fetches FII/DII flows, global cues, sector data, and passes everything to Claude for comprehensive analysis.
 
-### `tradeoracle portfolio`
+### `tradease portfolio`
 
 Show portfolio overview — total capital, available capital, unrealized P&L, open positions.
 
-### `tradeoracle trades`
+### `tradease trades`
 
 Show active trades with live P&L, stop-loss levels, and target status.
 
-### `tradeoracle history`
+### `tradease history`
 
 Show closed trades with win rate and performance stats.
 
 ```bash
-tradeoracle history            # Last 30 days (default)
-tradeoracle history --days 7   # Last 7 days
-tradeoracle history --days 90  # Last 90 days
+tradease history            # Last 30 days (default)
+tradease history --days 7   # Last 7 days
+tradease history --days 90  # Last 90 days
 ```
 
-### `tradeoracle exit <symbol>`
+### `tradease exit <symbol>`
 
 Manually exit an open position.
 
 ```bash
-tradeoracle exit RELIANCE
-tradeoracle exit RELIANCE --reason "Sector rotation out"
+tradease exit RELIANCE
+tradease exit RELIANCE --reason "Sector rotation out"
 ```
 
-### `tradeoracle pulse`
+### `tradease pulse`
 
 Quick market pulse — Nifty/BankNifty levels, change %, and open positions summary.
 
-### `tradeoracle daemon`
+### `tradease daemon`
 
 Start the 24x7 daemon. Runs all tasks on schedule:
 
@@ -136,7 +136,7 @@ Start the 24x7 daemon. Runs all tasks on schedule:
 | Post-market | Save daily summary + stats | 3:45 PM Mon-Fri |
 
 ```bash
-tradeoracle daemon    # Start daemon
+tradease daemon    # Start daemon
 # or
 npm start             # Same thing
 ```
@@ -178,7 +178,7 @@ All settings in `src/config/settings.js`:
 ## Project Structure
 
 ```
-TradeOracle/
+Tradease/
 ├── src/
 │   ├── index.js              # CLI entry point (Commander.js)
 │   ├── analysis/

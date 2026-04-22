@@ -25,7 +25,7 @@ import { notifyScanComplete } from '../utils/notify.js';
 export async function runScan(options = {}) {
   const { interactive = true, topN = 15 } = options;
 
-  displayHeader('TradeOracle Scanner', 'Pre-market F&O scan');
+  displayHeader('Tradease Scanner', 'Pre-market F&O scan');
 
   // Step 1: Screen stocks
   const screenSpinner = ora('Scanning F&O stocks...').start();

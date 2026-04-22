@@ -1,11 +1,11 @@
 {
-  "name": "tradeoracle",
+  "name": "tradease",
   "version": "1.0.0",
   "description": "AI-powered Indian F&O trading decision system using Claude",
   "main": "src/index.js",
   "type": "module",
   "bin": {
-    "tradeoracle": "./src/index.js"
+    "tradease": "./src/index.js"
   },
   "scripts": {
     "start": "node src/index.js daemon",

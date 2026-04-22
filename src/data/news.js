@@ -4,7 +4,7 @@ import { FNO_STOCKS } from './fno-stocks.js';
 
 const parser = new Parser({
   timeout: 10000,
-  headers: { 'User-Agent': 'TradeOracle/1.0' },
+  headers: { 'User-Agent': 'Tradease/1.0' },
 });
 
 // ---------------------------------------------------------------------------

@@ -19,7 +19,7 @@ import { notifyScanComplete, notifyDaemonStart, notifyDaemonStop, notifyDailySum
 const program = new Command();
 
 program
-  .name('tradeoracle')
+  .name('tradease')
   .description('AI-powered Indian F&O trading decision system')
   .version('1.0.0');
 
@@ -59,7 +59,7 @@ program
         if (opts.deep) mode = 'deep';
       }
       if (!sym) {
-        console.error(chalk.red('Usage: tradeoracle research [quick|deep] <SYMBOL>'));
+        console.error(chalk.red('Usage: tradease research [quick|deep] <SYMBOL>'));
         process.exit(1);
       }
       await runResearch(sym.toUpperCase(), mode);
@@ -184,7 +184,7 @@ program
     try {
       getDb(); // Initialize DB
 
-      displayHeader('TradeOracle Daemon', 'Starting all schedulers and monitors...');
+      displayHeader('Tradease Daemon', 'Starting all schedulers and monitors...');
 
       // Clean old log files on startup
       cleanOldLogs(30);
@@ -278,7 +278,7 @@ program
       console.log(chalk.gray(`    Wind Down:          ${SCHEDULE.WIND_DOWN}`));
       console.log(chalk.gray(`    Post Market:        ${SCHEDULE.POST_MARKET}`));
       console.log('');
-      console.log(chalk.green.bold('  TradeOracle daemon running...'));
+      console.log(chalk.green.bold('  Tradease daemon running...'));
       console.log(chalk.gray('  Press Ctrl+C to stop.\n'));
 
       notifyDaemonStart();

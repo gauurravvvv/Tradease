@@ -1,7 +1,7 @@
 import notifier from 'node-notifier';
 import { logger } from './logger.js';
 
-const APP_NAME = 'TradeOracle';
+const APP_NAME = 'Tradease';
 
 /**
  * Send desktop notification. Non-blocking, never throws.
