@@ -4,6 +4,7 @@ import { shouldExit, calculateTrailingStop } from '../trading/risk.js';
 import { checkIndexHealth } from '../listeners/index-monitor.js';
 import { getQuote } from '../data/market.js';
 import { computeATR } from '../analysis/technicals.js';
+import { RSI, MACD } from 'technicalindicators';
 import { getHistorical } from '../data/market.js';
 import { notifyTradeExit, notifyStopLoss, notifyTargetHit, notifyIndexCrash } from '../utils/notify.js';
 import { logger } from '../utils/logger.js';
@@ -82,6 +83,21 @@ export class PositionGuardian extends BaseAgent {
     const hist = await getHistorical(trade.symbol);
     const atr = computeATR(hist);
 
+    // Momentum context for adaptive trailing
+    let momentum = null;
+    if (hist && hist.length >= 26) {
+      const closes = hist.map(d => d.close);
+      const rsiValues = RSI.calculate({ values: closes, period: 14 });
+      const macdValues = MACD.calculate({ values: closes, fastPeriod: 12, slowPeriod: 26, signalPeriod: 9, SimpleMAOscillator: false, SimpleMASignal: false });
+      if (rsiValues.length > 0 && macdValues.length >= 2) {
+        momentum = {
+          rsi: rsiValues[rsiValues.length - 1],
+          macdHistogram: macdValues[macdValues.length - 1].histogram || 0,
+          macdPrevHistogram: macdValues[macdValues.length - 2].histogram || 0,
+        };
+      }
+    }
+
     // Mechanical exit check via risk.js
     const exitCheck = shouldExit(trade, price, atr);
 
@@ -106,7 +122,7 @@ export class PositionGuardian extends BaseAgent {
           partialExit(trade.id, 0.5, price, 'T1 hit');
           notifyTargetHit(trade.symbol, 1, price);
           // Trail SL to breakeven (entry price)
-          const newTrail = calculateTrailingStop(trade.entry_price, price, atr, trade.type);
+          const newTrail = calculateTrailingStop(trade.entry_price, price, atr, trade.type, momentum);
           updateTradePrice(trade.id, price); // refresh
           this.log('t1_hit', trade.symbol, `T1=${price}, SL→breakeven`);
         }
@@ -126,7 +142,7 @@ export class PositionGuardian extends BaseAgent {
       default: {
         // Update trailing stop if applicable
         if (trade.t1_hit) {
-          const trail = calculateTrailingStop(trade.entry_price, price, atr, trade.type);
+          const trail = calculateTrailingStop(trade.entry_price, price, atr, trade.type, momentum);
           if (trail && this._trailingStopHit(trade, price, trail)) {
             const pnl = this._calcPnl(trade, price);
             exitTrade(trade.id, price, 'trailing stop hit');

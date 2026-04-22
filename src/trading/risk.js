@@ -10,6 +10,7 @@ const {
   RISK_REWARD,
   NO_NEW_ENTRY_AFTER,
   PROFIT_BOOKING,
+  ADAPTIVE_TRAIL,
 } = TRADING;
 
 /**
@@ -82,27 +83,60 @@ export function calculateTargets(entryPrice, stopLoss, type) {
 }
 
 /**
+ * Compute momentum-based ATR multiplier for trailing stop.
+ * Strong trend = wide trail (let profits run), weakening = tight trail (protect gains).
+ * @param {{ rsi: number, macdHistogram: number, macdPrevHistogram: number }|null} momentum
+ * @param {'CALL'|'PUT'} type
+ * @returns {number} ATR multiplier
+ */
+function computeMomentumMultiplier(momentum, type) {
+  if (!momentum || !ADAPTIVE_TRAIL) return TRAILING_STOP_ATR;
+
+  const { rsi, macdHistogram, macdPrevHistogram } = momentum;
+
+  // Exhaustion: RSI extreme for trade direction
+  if (type === 'CALL' && rsi != null && rsi > 75) return ADAPTIVE_TRAIL.EXHAUSTION_MULTIPLIER;
+  if (type === 'PUT' && rsi != null && rsi < 25) return ADAPTIVE_TRAIL.EXHAUSTION_MULTIPLIER;
+
+  const macdExpanding = Math.abs(macdHistogram) > Math.abs(macdPrevHistogram);
+  const macdDirection = type === 'CALL' ? macdHistogram > 0 : macdHistogram < 0;
+
+  // Strong trend: MACD expanding in trade direction + RSI mid-range
+  if (macdExpanding && macdDirection && rsi != null && rsi > 40 && rsi < 60) {
+    return ADAPTIVE_TRAIL.STRONG_MULTIPLIER;
+  }
+
+  // Normal trend: MACD in trade direction
+  if (macdDirection) return ADAPTIVE_TRAIL.NORMAL_MULTIPLIER;
+
+  // Weakening: MACD against trade direction or contracting
+  return ADAPTIVE_TRAIL.WEAK_MULTIPLIER;
+}
+
+/**
  * Calculate trailing stop-loss. Only activates after profit exceeds trigger %.
  * @param {number} entryPrice
  * @param {number} currentPrice
  * @param {number} atr
  * @param {'CALL'|'PUT'} type
+ * @param {{ rsi: number, macdHistogram: number, macdPrevHistogram: number }|null} momentum
  * @returns {number|null} Trailing stop price, or null if not yet triggered
  */
-export function calculateTrailingStop(entryPrice, currentPrice, atr, type) {
+export function calculateTrailingStop(entryPrice, currentPrice, atr, type, momentum = null) {
   const profitPct = type === 'CALL'
     ? ((currentPrice - entryPrice) / entryPrice) * 100
     : ((entryPrice - currentPrice) / entryPrice) * 100;
 
   if (profitPct < TRAILING_TRIGGER_PCT) {
-    return null; // Not enough profit to trigger trailing stop
+    return null;
   }
 
+  const multiplier = computeMomentumMultiplier(momentum, type);
+
   if (type === 'CALL') {
-    return Math.round((currentPrice - atr * TRAILING_STOP_ATR) * 100) / 100;
+    return Math.round((currentPrice - atr * multiplier) * 100) / 100;
   }
-  // PUT
-  return Math.round((currentPrice + atr * TRAILING_STOP_ATR) * 100) / 100;
+  return Math.round((currentPrice + atr * multiplier) * 100) / 100;
 }
 
 /**

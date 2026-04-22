@@ -20,6 +20,12 @@ export const TRADING = {
     T2: 0.25,
     RUNNER: 0.25,
   },
+  ADAPTIVE_TRAIL: {
+    STRONG_MULTIPLIER: 1.0,
+    NORMAL_MULTIPLIER: 0.7,
+    WEAK_MULTIPLIER: 0.4,
+    EXHAUSTION_MULTIPLIER: 0.3,
+  },
   RISK_REWARD: {
     T1: 2,
     T2: 3,
