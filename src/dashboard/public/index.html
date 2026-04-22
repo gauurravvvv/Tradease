@@ -248,7 +248,41 @@
     @media(max-width:1100px){.cards-6{grid-template-columns:repeat(3,1fr)}.rec-grid{grid-template-columns:repeat(auto-fill,minmax(250px,1fr))}}
     @media(max-width:900px){.grid-2{grid-template-columns:1fr}.cards-6{grid-template-columns:repeat(2,1fr)}}
     @media(max-width:600px){.cards-6{grid-template-columns:1fr}}
+    /* Risk Dashboard */
+    .risk-grid{display:grid;grid-template-columns:200px 1fr 1fr;gap:16px;align-items:start}
+    .risk-donut-wrap{text-align:center}
+    .risk-donut-wrap canvas{display:block;margin:0 auto 8px}
+    .risk-donut-legend{font-size:0.6rem;color:var(--text-dim);text-align:left;padding-left:8px}
+    .risk-donut-legend div{padding:2px 0;display:flex;align-items:center;gap:6px}
+    .risk-donut-legend .dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+    .risk-bars{display:flex;flex-direction:column;gap:6px}
+    .risk-bar-row{display:flex;align-items:center;gap:8px;font-size:0.65rem}
+    .risk-bar-label{width:60px;color:var(--text-dim);text-align:right;flex-shrink:0}
+    .risk-bar-track{flex:1;height:16px;background:rgba(255,255,255,0.04);border-radius:3px;overflow:hidden}
+    .risk-bar-fill{height:100%;border-radius:3px;transition:width 0.5s}
+    .risk-bar-pct{width:40px;font-size:0.6rem;color:var(--text-dim);text-align:right}
+    .risk-concentration{font-size:0.55rem;color:var(--red);margin-top:4px;display:none}
+    .risk-metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:12px}
+    .risk-metric{background:var(--bg);border:1px solid var(--card-border);border-radius:8px;padding:10px;text-align:center}
+    .risk-metric-label{font-size:0.55rem;text-transform:uppercase;letter-spacing:1px;color:var(--text-dim);margin-bottom:4px}
+    .risk-metric-value{font-size:1rem;font-weight:700}
+    .drawdown-bar{height:8px;background:rgba(255,255,255,0.04);border-radius:4px;overflow:hidden;margin:8px 0}
+    .drawdown-fill{height:100%;border-radius:4px;transition:width 0.5s}
+    .drawdown-text{font-size:0.65rem;color:var(--text-dim)}
+    .chart-toggle{cursor:pointer;padding:4px 10px;font-size:0.6rem;background:rgba(6,182,212,0.1);border:1px solid rgba(6,182,212,0.3);color:var(--cyan);border-radius:4px;font-family:inherit;font-weight:600}
+    .chart-toggle:hover{background:rgba(6,182,212,0.2)}
+    .chart-toggle.active{background:rgba(6,182,212,0.25);border-color:var(--cyan)}
+    .trade-chart-area{height:350px;margin-top:10px;border-radius:8px;overflow:hidden;display:none}
+    .trade-chart-area.visible{display:block}
+    .default-chart-area{height:400px;border-radius:8px;overflow:hidden;margin-top:10px}
+    .perf-charts{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+    .perf-chart-box{height:250px;border-radius:8px;overflow:hidden}
+    .perf-toggle-bar{display:flex;gap:4px;margin-bottom:10px}
+    .perf-toggle{padding:4px 12px;font-size:0.6rem;border-radius:4px;border:1px solid var(--card-border);background:transparent;color:var(--text-dim);cursor:pointer;font-family:inherit}
+    .perf-toggle.active{background:rgba(6,182,212,0.15);border-color:var(--cyan);color:var(--cyan)}
+    @media(max-width:900px){.risk-grid{grid-template-columns:1fr}.perf-charts{grid-template-columns:1fr}.risk-metrics{grid-template-columns:repeat(2,1fr)}}
   </style>
+  <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
 
@@ -326,6 +360,38 @@
   </div>
 </div>
 
+<!-- Risk Dashboard -->
+<div class="section" id="risk-section">
+  <div class="section-header">
+    <span class="section-title">Risk Dashboard</span>
+    <div class="section-actions">
+      <span class="badge badge-gray" id="risk-heat-badge">No positions</span>
+    </div>
+  </div>
+  <div class="risk-grid" id="risk-grid">
+    <div class="risk-donut-wrap">
+      <canvas id="risk-donut" width="180" height="180"></canvas>
+      <div class="risk-donut-legend" id="risk-donut-legend"></div>
+    </div>
+    <div>
+      <div style="font-size:0.65rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Sector Exposure</div>
+      <div class="risk-bars" id="risk-sector-bars"><div class="text-dim" style="font-size:0.65rem">No positions</div></div>
+      <div class="risk-concentration" id="risk-concentration-warn">Warning: >50% concentration in one sector</div>
+    </div>
+    <div>
+      <div style="font-size:0.65rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Max Drawdown</div>
+      <div class="drawdown-text" id="drawdown-text">Drawdown: 0% (max: 0%)</div>
+      <div class="drawdown-bar"><div class="drawdown-fill" id="drawdown-fill" style="width:0%;background:var(--green)"></div></div>
+    </div>
+  </div>
+  <div class="risk-metrics" id="risk-metrics">
+    <div class="risk-metric"><div class="risk-metric-label">Heat</div><div class="risk-metric-value text-green" id="rm-heat">₹0</div></div>
+    <div class="risk-metric"><div class="risk-metric-label">Worst Case</div><div class="risk-metric-value text-red" id="rm-worst">₹0</div></div>
+    <div class="risk-metric"><div class="risk-metric-label">Avg R:R</div><div class="risk-metric-value text-cyan" id="rm-rr">0.0</div></div>
+    <div class="risk-metric"><div class="risk-metric-label">Streak</div><div class="risk-metric-value" id="rm-streak">--</div></div>
+  </div>
+</div>
+
 <!-- Open Trades (live-updating) -->
 <div class="section">
   <div class="section-header">
@@ -391,6 +457,39 @@
     <div class="section-actions"><span class="badge badge-gray" id="news-badge">--</span><div class="section-spinner" id="spin-news"></div></div>
   </div>
   <div id="news-container"><div class="loading" style="height:150px"></div></div>
+</div>
+
+<!-- Performance Analytics -->
+<div class="section" id="perf-section">
+  <div class="section-header">
+    <span class="section-title">Performance Analytics</span>
+    <div class="section-actions">
+      <div class="perf-toggle-bar">
+        <button class="perf-toggle active" onclick="loadEquityCurve(7)" data-days="7">7d</button>
+        <button class="perf-toggle" onclick="loadEquityCurve(30)" data-days="30">30d</button>
+        <button class="perf-toggle" onclick="loadEquityCurve(90)" data-days="90">90d</button>
+        <button class="perf-toggle" onclick="loadEquityCurve(365)" data-days="365">All</button>
+      </div>
+    </div>
+  </div>
+  <div id="perf-stats-row" style="display:flex;gap:16px;margin-bottom:10px;font-size:0.65rem;color:var(--text-dim);flex-wrap:wrap">
+    <span>Return: <b id="perf-return" class="text-green">0%</b></span>
+    <span>Peak: <b id="perf-peak">₹2,00,000</b></span>
+    <span>Drawdown: <b id="perf-dd" class="text-red">0%</b></span>
+    <span>Best Day: <b id="perf-best" class="text-green">₹0</b></span>
+    <span>Worst Day: <b id="perf-worst" class="text-red">₹0</b></span>
+  </div>
+  <div class="perf-charts">
+    <div>
+      <div style="font-size:0.6rem;color:var(--text-dim);margin-bottom:4px">Equity Curve</div>
+      <div class="perf-chart-box" id="equity-chart"></div>
+    </div>
+    <div>
+      <div style="font-size:0.6rem;color:var(--text-dim);margin-bottom:4px">Daily P&L</div>
+      <div class="perf-chart-box" id="pnl-chart"></div>
+    </div>
+  </div>
+  <div id="perf-empty" style="display:none;text-align:center;padding:40px;color:var(--text-dim);font-size:0.7rem">Not enough data — charts populate after first trading day</div>
 </div>
 
 <!-- Stats + History -->
@@ -541,6 +640,8 @@ function renderTradesLive(trades){
     const prevP=_prevPrices[t.id];const priceChanged=prevP&&prevP!==t.current_price;
     const flashClass=priceChanged?(t.current_price>prevP?'flash-green':'flash-red'):'';
     _prevPrices[t.id]=t.current_price;
+    const safeSymbol=t.symbol.replace(/[^a-zA-Z0-9]/g,'');
+    const tradeDataJson=JSON.stringify({entry_price:t.entry_price,stop_loss:t.stop_loss,target1:t.target1,target2:t.target2,trailing_stop:t.trailing_stop}).replace(/"/g,'&quot;');
     return`<tr>
       <td class="text-bold" style="cursor:pointer" onclick="openResearchFor('${t.symbol}')">${t.symbol}</td>
       <td class="${t.type==='CALL'?'text-green':'text-red'} text-bold">${t.type}</td>
@@ -553,10 +654,11 @@ function renderTradesLive(trades){
       <td class="text-dim">${t.quantity||1}L</td>
       <td>${INR(t.capital_used)}</td>
       <td style="white-space:nowrap">
+        <button class="chart-toggle" onclick="toggleTradeChart('${t.symbol}','${tradeDataJson}')">Chart</button>
         <button class="btn btn-sm btn-red" onclick="openExitModal(${t.id},'${t.symbol}','full')">Exit</button>
         <button class="btn btn-sm" onclick="openExitModal(${t.id},'${t.symbol}','partial')" style="margin-left:2px">50%</button>
       </td>
-    </tr>`}).join('');
+    </tr><tr><td colspan="11" style="padding:0;border:none"><div class="trade-chart-area" id="chart-area-${safeSymbol}"></div></td></tr>`}).join('');
   el.innerHTML=`<table><thead><tr><th>Symbol</th><th>Type</th><th>Entry</th><th>CMP</th><th>SL</th><th>T1</th><th>Targets</th><th>P&L</th><th>Qty</th><th>Capital</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table>`;
   document.getElementById('last-updated').textContent=`Live: ${new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}`;
 }
@@ -754,12 +856,262 @@ async function loadPicks(){spin('spin-picks',true);try{renderPicks(await api('/a
 async function loadNews(){spin('spin-news',true);try{renderNews(await api('/api/news-digest'))}catch(e){console.error('News:',e)}spin('spin-news',false)}
 async function loadLiveNews(){spin('spin-live-news',true);try{renderLiveNews(await api('/api/live-news'))}catch(e){console.error('LiveNews:',e)}spin('spin-live-news',false)}
 
+// ── Number formatter (plain, no currency) ──
+const fmt=n=>{if(n==null||isNaN(n))return'0';return Math.abs(n).toLocaleString('en-IN',{maximumFractionDigits:0})};
+
+    // ═══ Risk Dashboard ═══
+    const SECTOR_COLORS = {
+      Banking:'#3b82f6', Finance:'#6366f1', IT:'#06b6d4', Energy:'#f97316',
+      Auto:'#eab308', Metals:'#a855f7', Pharma:'#22c55e', Healthcare:'#10b981',
+      FMCG:'#ec4899', Consumer:'#f43f5e', Infra:'#8b5cf6', Cement:'#78716c',
+      Telecom:'#14b8a6', Index:'#64748b', Other:'#475569',
+    };
+
+    function drawDonut(canvasId, slices, centerText) {
+      const canvas = document.getElementById(canvasId);
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      const w = canvas.width, h = canvas.height;
+      const cx = w / 2, cy = h / 2, r = Math.min(cx, cy) - 10, inner = r * 0.6;
+      ctx.clearRect(0, 0, w, h);
+      if (!slices.length) {
+        ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.arc(cx, cy, inner, 0, Math.PI * 2, true);
+        ctx.fillStyle = 'rgba(255,255,255,0.04)'; ctx.fill();
+      } else {
+        let startAngle = -Math.PI / 2;
+        for (const s of slices) {
+          const sweep = (s.pct / 100) * Math.PI * 2;
+          ctx.beginPath(); ctx.arc(cx, cy, r, startAngle, startAngle + sweep);
+          ctx.arc(cx, cy, inner, startAngle + sweep, startAngle, true);
+          ctx.closePath(); ctx.fillStyle = s.color; ctx.fill();
+          startAngle += sweep;
+        }
+      }
+      ctx.fillStyle = '#e0e0e0'; ctx.font = '700 13px monospace';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(centerText, cx, cy);
+    }
+
+    async function loadRiskDashboard() {
+      try {
+        const res = await fetch('/api/risk-summary');
+        const data = await res.json();
+        renderRiskDashboard(data);
+      } catch (err) { console.error('Risk dashboard load failed:', err); }
+    }
+
+    function renderRiskDashboard(data) {
+      const { allocation, sectorExposure, drawdown, metrics } = data;
+      // Donut
+      const slices = [];
+      for (const p of allocation.positions) {
+        slices.push({ pct: p.pct, color: SECTOR_COLORS[p.sector] || SECTOR_COLORS.Other, label: p.symbol });
+      }
+      slices.push({ pct: allocation.available.pct, color: 'rgba(255,255,255,0.06)', label: 'Available' });
+      drawDonut('risk-donut', slices, `${allocation.available.pct}% free`);
+      // Legend
+      const legend = document.getElementById('risk-donut-legend');
+      if (legend) {
+        legend.innerHTML = allocation.positions.map(p =>
+          `<div><span class="dot" style="background:${SECTOR_COLORS[p.sector] || SECTOR_COLORS.Other}"></span>${p.symbol} ₹${fmt(p.capital)}</div>`
+        ).join('') + (allocation.positions.length ? `<div><span class="dot" style="background:rgba(255,255,255,0.06)"></span>Available ₹${fmt(allocation.available.capital)}</div>` : '');
+      }
+      // Sector bars
+      const barsEl = document.getElementById('risk-sector-bars');
+      if (barsEl) {
+        if (sectorExposure.length === 0) {
+          barsEl.innerHTML = '<div class="text-dim" style="font-size:0.65rem">No positions</div>';
+        } else {
+          const maxPct = Math.max(...sectorExposure.map(s => s.pct), 1);
+          barsEl.innerHTML = sectorExposure.map(s => {
+            const color = SECTOR_COLORS[s.sector] || SECTOR_COLORS.Other;
+            const widthPct = (s.pct / Math.max(maxPct * 1.2, 50)) * 100;
+            return `<div class="risk-bar-row"><span class="risk-bar-label">${s.sector}</span><div class="risk-bar-track"><div class="risk-bar-fill" style="width:${widthPct}%;background:${color}"></div></div><span class="risk-bar-pct">${s.pct}%</span></div>`;
+          }).join('');
+        }
+        const warn = document.getElementById('risk-concentration-warn');
+        const deployed = sectorExposure.reduce((s, e) => s + e.capital, 0);
+        const concentrated = deployed > 0 && sectorExposure.some(s => (s.capital / deployed) > 0.5);
+        if (warn) warn.style.display = concentrated ? 'block' : 'none';
+      }
+      // Drawdown
+      const ddText = document.getElementById('drawdown-text');
+      const ddFill = document.getElementById('drawdown-fill');
+      if (ddText) ddText.textContent = `Drawdown: ${drawdown.currentDrawdownPct}% (max: ${drawdown.maxDrawdownPct}%)`;
+      if (ddFill) {
+        const pct = Math.min(drawdown.currentDrawdownPct, 20);
+        ddFill.style.width = `${(pct / 20) * 100}%`;
+        ddFill.style.background = pct < 5 ? 'var(--green)' : pct < 10 ? 'var(--yellow)' : 'var(--red)';
+      }
+      // Metrics
+      const heatPct = allocation.available.capital > 0 ? (metrics.totalHeat / (metrics.totalHeat + allocation.available.capital)) * 100 : 0;
+      const heatEl = document.getElementById('rm-heat');
+      if (heatEl) { heatEl.textContent = `₹${fmt(metrics.totalHeat)}`; heatEl.className = 'risk-metric-value ' + (heatPct < 30 ? 'text-green' : heatPct < 60 ? 'text-yellow' : 'text-red'); }
+      const worstEl = document.getElementById('rm-worst');
+      if (worstEl) worstEl.textContent = `₹${fmt(metrics.worstCaseLoss)}`;
+      const rrEl = document.getElementById('rm-rr');
+      if (rrEl) { rrEl.textContent = metrics.avgRiskReward.toFixed(1); rrEl.className = 'risk-metric-value ' + (metrics.avgRiskReward >= 2 ? 'text-green' : 'text-yellow'); }
+      const streakEl = document.getElementById('rm-streak');
+      if (streakEl) {
+        if (metrics.winStreak > 0) { streakEl.textContent = `${metrics.winStreak}W`; streakEl.className = 'risk-metric-value text-green'; }
+        else if (metrics.lossStreak > 0) { streakEl.textContent = `${metrics.lossStreak}L`; streakEl.className = 'risk-metric-value text-red'; }
+        else { streakEl.textContent = '--'; streakEl.className = 'risk-metric-value text-dim'; }
+      }
+      // Heat badge
+      const heatBadge = document.getElementById('risk-heat-badge');
+      if (heatBadge) {
+        if (allocation.positions.length === 0) { heatBadge.textContent = 'No positions'; heatBadge.className = 'badge badge-gray'; }
+        else { heatBadge.textContent = `${allocation.positions.length} pos | ₹${fmt(metrics.totalHeat)} at risk`; heatBadge.className = 'badge ' + (heatPct < 30 ? 'badge-green' : heatPct < 60 ? 'badge-yellow' : 'badge-red'); }
+      }
+    }
+
+    // ═══ Intraday Charts ═══
+    const tradeCharts = {};
+
+    function createTradeChart(containerId, symbol, trade) {
+      const container = document.getElementById(containerId);
+      if (!container) return null;
+      container.innerHTML = '';
+      const chart = LightweightCharts.createChart(container, {
+        width: container.clientWidth, height: container.classList.contains('default-chart-area') ? 400 : 350,
+        layout: { background: { color: '#0a0a0f' }, textColor: '#6b7280', fontSize: 10, fontFamily: 'monospace' },
+        grid: { vertLines: { color: '#1e1e2e' }, horzLines: { color: '#1e1e2e' } },
+        crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+        rightPriceScale: { borderColor: '#1e1e2e' },
+        timeScale: { borderColor: '#1e1e2e', timeVisible: true, secondsVisible: false },
+      });
+      const candleSeries = chart.addCandlestickSeries({
+        upColor: '#22c55e', downColor: '#ef4444',
+        borderUpColor: '#22c55e', borderDownColor: '#ef4444',
+        wickUpColor: '#22c55e', wickDownColor: '#ef4444',
+      });
+      const volumeSeries = chart.addHistogramSeries({ priceFormat: { type: 'volume' }, priceScaleId: 'vol' });
+      chart.priceScale('vol').applyOptions({ scaleMargins: { top: 0.85, bottom: 0 } });
+      if (trade) {
+        if (trade.entry_price) candleSeries.createPriceLine({ price: trade.entry_price, color: '#ffffff', lineWidth: 1, lineStyle: 0, title: 'Entry' });
+        if (trade.stop_loss) candleSeries.createPriceLine({ price: trade.stop_loss, color: '#ef4444', lineWidth: 1, lineStyle: 0, title: 'SL' });
+        if (trade.target1) candleSeries.createPriceLine({ price: trade.target1, color: '#22c55e', lineWidth: 1, lineStyle: 0, title: 'T1' });
+        if (trade.target2) candleSeries.createPriceLine({ price: trade.target2, color: '#3b82f6', lineWidth: 1, lineStyle: 0, title: 'T2' });
+        if (trade.trailing_stop) candleSeries.createPriceLine({ price: trade.trailing_stop, color: '#eab308', lineWidth: 1, lineStyle: 2, title: 'Trail' });
+      }
+      const ro = new ResizeObserver(() => { chart.applyOptions({ width: container.clientWidth }); });
+      ro.observe(container);
+      return { chart, candleSeries, volumeSeries, resizeObserver: ro };
+    }
+
+    async function loadChartData(symbol) {
+      try { const res = await fetch(`/api/chart/${symbol}`); return await res.json(); }
+      catch { return { candles: [], volume: [] }; }
+    }
+
+    async function toggleTradeChart(symbol, tradeJson) {
+      const areaId = `chart-area-${symbol.replace(/[^a-zA-Z0-9]/g,'')}`;
+      const area = document.getElementById(areaId);
+      if (!area) return;
+      if (area.classList.contains('visible')) {
+        area.classList.remove('visible');
+        if (tradeCharts[symbol]) { tradeCharts[symbol].resizeObserver?.disconnect(); tradeCharts[symbol].chart?.remove(); delete tradeCharts[symbol]; }
+        return;
+      }
+      area.classList.add('visible');
+      const trade = typeof tradeJson === 'string' ? JSON.parse(tradeJson) : tradeJson;
+      const chartObj = createTradeChart(areaId, symbol, trade);
+      if (!chartObj) return;
+      tradeCharts[symbol] = chartObj;
+      const data = await loadChartData(symbol);
+      if (data.candles && data.candles.length) {
+        chartObj.candleSeries.setData(data.candles);
+        chartObj.volumeSeries.setData(data.volume || []);
+        chartObj.chart.timeScale().fitContent();
+      }
+    }
+
+    // Auto-refresh open charts every 2 min
+    setInterval(async () => {
+      for (const [symbol, chartObj] of Object.entries(tradeCharts)) {
+        try {
+          const data = await loadChartData(symbol);
+          if (data.candles && data.candles.length) { chartObj.candleSeries.setData(data.candles); chartObj.volumeSeries.setData(data.volume || []); }
+        } catch {}
+      }
+    }, 120000);
+
+    // ═══ Performance Analytics Charts ═══
+    let equityChart = null;
+    let pnlChart = null;
+
+    async function loadEquityCurve(days = 7) {
+      document.querySelectorAll('.perf-toggle').forEach(btn => {
+        btn.classList.toggle('active', parseInt(btn.dataset.days) === days);
+      });
+      try {
+        const res = await fetch(`/api/equity-curve?days=${days}`);
+        const data = await res.json();
+        const { curve, dailyPnl, stats } = data;
+        // Stats row
+        const retEl = document.getElementById('perf-return');
+        if (retEl) { retEl.textContent = `${stats.totalReturn >= 0 ? '+' : ''}${stats.totalReturn}%`; retEl.className = stats.totalReturn >= 0 ? 'text-green' : 'text-red'; }
+        const peakEl = document.getElementById('perf-peak');
+        if (peakEl) peakEl.textContent = `₹${fmt(stats.peakCapital)}`;
+        const ddEl = document.getElementById('perf-dd');
+        if (ddEl) ddEl.textContent = `${stats.maxDrawdown}%`;
+        const bestEl = document.getElementById('perf-best');
+        if (bestEl) bestEl.textContent = `₹${fmt(stats.bestDay)}`;
+        const worstEl = document.getElementById('perf-worst');
+        if (worstEl) worstEl.textContent = `₹${fmt(stats.worstDay)}`;
+        // Empty check
+        const emptyEl = document.getElementById('perf-empty');
+        const chartsEl = document.querySelector('.perf-charts');
+        if (curve.length === 0 && dailyPnl.length === 0) {
+          if (emptyEl) emptyEl.style.display = 'block';
+          if (chartsEl) chartsEl.style.display = 'none';
+          return;
+        }
+        if (emptyEl) emptyEl.style.display = 'none';
+        if (chartsEl) chartsEl.style.display = 'grid';
+        // Equity curve
+        const eqContainer = document.getElementById('equity-chart');
+        if (eqContainer) {
+          if (equityChart) equityChart.remove();
+          equityChart = LightweightCharts.createChart(eqContainer, {
+            width: eqContainer.clientWidth, height: 250,
+            layout: { background: { color: '#0a0a0f' }, textColor: '#6b7280', fontSize: 10, fontFamily: 'monospace' },
+            grid: { vertLines: { color: '#1e1e2e' }, horzLines: { color: '#1e1e2e' } },
+            rightPriceScale: { borderColor: '#1e1e2e' }, timeScale: { borderColor: '#1e1e2e' },
+          });
+          const areaSeries = equityChart.addAreaSeries({ lineColor: '#00d4aa', lineWidth: 2, topColor: 'rgba(0,212,170,0.3)', bottomColor: 'rgba(0,212,170,0.02)' });
+          areaSeries.setData(curve);
+          areaSeries.createPriceLine({ price: stats.startingCapital, color: '#4b5563', lineWidth: 1, lineStyle: 2, title: 'Start' });
+          equityChart.timeScale().fitContent();
+          new ResizeObserver(() => equityChart?.applyOptions({ width: eqContainer.clientWidth })).observe(eqContainer);
+        }
+        // Daily P&L
+        const pnlContainer = document.getElementById('pnl-chart');
+        if (pnlContainer) {
+          if (pnlChart) pnlChart.remove();
+          pnlChart = LightweightCharts.createChart(pnlContainer, {
+            width: pnlContainer.clientWidth, height: 250,
+            layout: { background: { color: '#0a0a0f' }, textColor: '#6b7280', fontSize: 10, fontFamily: 'monospace' },
+            grid: { vertLines: { color: '#1e1e2e' }, horzLines: { color: '#1e1e2e' } },
+            rightPriceScale: { borderColor: '#1e1e2e' }, timeScale: { borderColor: '#1e1e2e' },
+          });
+          const histSeries = pnlChart.addHistogramSeries({ color: '#22c55e' });
+          histSeries.setData(dailyPnl);
+          pnlChart.timeScale().fitContent();
+          new ResizeObserver(() => pnlChart?.applyOptions({ width: pnlContainer.clientWidth })).observe(pnlContainer);
+        }
+      } catch (err) { console.error('Equity curve load failed:', err); }
+    }
+
 async function initialLoad(){
   await Promise.all([loadDashboard(),loadMarketStatus(),loadRecommendations(),loadLiveNews(),loadAgentStatus()]);
   document.getElementById('last-updated').textContent=`Live: ${new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}`;
   loadPicks().then(()=>loadNews());
+  loadRiskDashboard();
+  loadEquityCurve(7);
 }
-async function refreshAll(){await Promise.all([loadDashboard(),loadMarketStatus(),loadRecommendations(),loadPicks(),loadLiveNews(),loadAgentStatus()]);loadNews();toast('Dashboard refreshed','info',2000)}
+async function refreshAll(){await Promise.all([loadDashboard(),loadMarketStatus(),loadRecommendations(),loadPicks(),loadLiveNews(),loadAgentStatus(),loadRiskDashboard()]);loadNews();toast('Dashboard refreshed','info',2000)}
 
 initialLoad();
 // Fallback polling (SSE handles most live updates)
@@ -767,6 +1119,7 @@ setInterval(loadDashboard,60000);
 setInterval(loadMarketStatus,120000);
 setInterval(loadRecommendations,600000);
 setInterval(loadAgentStatus,30000);
+setInterval(loadRiskDashboard,30000);
 
 // ══════════════ ACTIONS ══════════════
 
