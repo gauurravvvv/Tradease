@@ -10,7 +10,13 @@ import { scoreSentiment, classifySentiment } from '../listeners/news-monitor.js'
 import { getGlobalCues } from '../data/global-cues.js';
 import { getFiiDiiData } from '../data/fii-dii.js';
 import { getSectorStrength } from '../analysis/sectors.js';
+import { screenStocks } from '../analysis/screener.js';
+import { fetchAllNews } from '../data/news.js';
 import { logger } from '../utils/logger.js';
+
+// Cache for expensive operations
+const screenerCache = { data: null, ts: 0 };
+const SCREENER_TTL = 10 * 60 * 1000; // 10 minutes
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -167,6 +173,84 @@ export function startDashboard(port = 3777) {
         })
       );
 
+      res.json(results);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Top 15 screener picks (cached 10 min)
+  app.get('/api/top-picks', async (req, res) => {
+    try {
+      const now = Date.now();
+      if (screenerCache.data && (now - screenerCache.ts) < SCREENER_TTL) {
+        return res.json(screenerCache.data);
+      }
+
+      const screened = await screenStocks();
+      const picks = screened.slice(0, 15).map(s => ({
+        symbol: s.symbol,
+        name: s.name,
+        sector: s.sector,
+        price: s.price,
+        changePct: s.changePct,
+        volume: s.volume,
+        score: s.score,
+        recommendation: s.recommendation,
+        lotSize: s.lotSize,
+        rsi: s.technicals?.rsi?.value,
+        macdTrend: s.technicals?.macd?.trend,
+        atr: s.technicals?.atr?.value,
+        volumeRatio: s.technicals?.volume?.ratio,
+        sectorRank: s.sectorRank,
+        sectorTrend: s.sectorTrend,
+      }));
+
+      screenerCache.data = picks;
+      screenerCache.ts = now;
+      res.json(picks);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // News digest for top 15 stocks
+  app.get('/api/news-digest', async (req, res) => {
+    try {
+      // Get top picks (from cache or fresh)
+      let picks = screenerCache.data;
+      if (!picks) {
+        const screened = await screenStocks();
+        picks = screened.slice(0, 15);
+        screenerCache.data = picks;
+        screenerCache.ts = Date.now();
+      }
+
+      const symbols = picks.map(p => p.symbol);
+      const results = await Promise.all(
+        symbols.map(async (symbol) => {
+          try {
+            const articles = await getStockNews(symbol);
+            const scored = articles.map(a => ({
+              title: a.title,
+              link: a.link,
+              source: a.source,
+              pubDate: a.pubDate,
+              score: scoreSentiment(a),
+            }));
+            const totalScore = scored.reduce((s, a) => s + a.score, 0);
+            return {
+              symbol,
+              newsCount: articles.length,
+              totalScore,
+              sentiment: classifySentiment(totalScore),
+              headlines: scored.sort((a, b) => Math.abs(b.score) - Math.abs(a.score)).slice(0, 5),
+            };
+          } catch {
+            return { symbol, newsCount: 0, totalScore: 0, sentiment: 'neutral', headlines: [] };
+          }
+        })
+      );
       res.json(results);
     } catch (err) {
       res.status(500).json({ error: err.message });

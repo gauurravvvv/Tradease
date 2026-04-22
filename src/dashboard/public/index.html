@@ -6,799 +6,440 @@
   <title>Tradease Dashboard</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-
     :root {
-      --bg: #0a0a0f;
-      --card: #12121a;
-      --card-border: #1e1e2e;
-      --text: #e0e0e0;
-      --text-dim: #6b7280;
-      --green: #22c55e;
-      --red: #ef4444;
-      --yellow: #eab308;
-      --cyan: #06b6d4;
-      --purple: #a855f7;
-      --accent: #3b82f6;
+      --bg: #0a0a0f; --card: #12121a; --card-border: #1e1e2e;
+      --text: #e0e0e0; --text-dim: #6b7280;
+      --green: #22c55e; --red: #ef4444; --yellow: #eab308;
+      --cyan: #06b6d4; --purple: #a855f7; --accent: #3b82f6;
     }
+    body { font-family: 'SF Mono','Fira Code','JetBrains Mono',monospace; background: var(--bg); color: var(--text); min-height: 100vh; padding: 16px; }
 
-    body {
-      font-family: 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace;
-      background: var(--bg);
-      color: var(--text);
-      min-height: 100vh;
-      padding: 20px;
-    }
+    /* Header */
+    .header { display: flex; justify-content: space-between; align-items: center; padding: 14px 20px; background: linear-gradient(135deg,#12121a,#1a1a2e); border: 1px solid var(--card-border); border-radius: 12px; margin-bottom: 16px; }
+    .header h1 { font-size: 1.3rem; font-weight: 700; background: linear-gradient(90deg,var(--cyan),var(--accent)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .header .meta { display: flex; align-items: center; gap: 14px; font-size: 0.7rem; color: var(--text-dim); }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
 
-    /* ── Header ─────────────────────────────────── */
-    .header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 16px 24px;
-      background: linear-gradient(135deg, #12121a 0%, #1a1a2e 100%);
-      border: 1px solid var(--card-border);
-      border-radius: 12px;
-      margin-bottom: 20px;
-    }
-    .header h1 {
-      font-size: 1.4rem;
-      font-weight: 700;
-      background: linear-gradient(90deg, var(--cyan), var(--accent));
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-    }
-    .header .meta {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-      font-size: 0.75rem;
-      color: var(--text-dim);
-    }
-    .status-dot {
-      width: 8px; height: 8px;
-      border-radius: 50%;
-      background: var(--green);
-      animation: pulse 2s infinite;
-    }
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.4; }
-    }
+    /* Cards row */
+    .cards-6 { display: grid; grid-template-columns: repeat(6,1fr); gap: 12px; margin-bottom: 16px; }
+    .card { background: var(--card); border: 1px solid var(--card-border); border-radius: 10px; padding: 14px 16px; }
+    .card-title { font-size: 0.6rem; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-dim); margin-bottom: 6px; }
+    .card-value { font-size: 1.3rem; font-weight: 700; }
+    .card-sub { font-size: 0.65rem; color: var(--text-dim); margin-top: 3px; }
 
-    /* ── Grid ───────────────────────────────────── */
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 16px;
-      margin-bottom: 20px;
-    }
+    /* Section */
+    .section { background: var(--card); border: 1px solid var(--card-border); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+    .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+    .section-title { font-size: 0.8rem; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: var(--cyan); }
 
-    .card {
-      background: var(--card);
-      border: 1px solid var(--card-border);
-      border-radius: 10px;
-      padding: 16px 20px;
-    }
-    .card-title {
-      font-size: 0.65rem;
-      text-transform: uppercase;
-      letter-spacing: 1.5px;
-      color: var(--text-dim);
-      margin-bottom: 8px;
-    }
-    .card-value {
-      font-size: 1.5rem;
-      font-weight: 700;
-    }
-    .card-sub {
-      font-size: 0.7rem;
-      color: var(--text-dim);
-      margin-top: 4px;
-    }
-
-    /* ── Market Pulse ───────────────────────────── */
-    .pulse-row {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 16px;
-      margin-bottom: 20px;
-    }
-    .pulse-card {
-      background: var(--card);
-      border: 1px solid var(--card-border);
-      border-radius: 10px;
-      padding: 14px 20px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    .pulse-label { font-size: 0.75rem; color: var(--text-dim); }
-    .pulse-price { font-size: 1.1rem; font-weight: 600; }
-    .pulse-change { font-size: 0.85rem; font-weight: 600; }
-
-    /* ── Sections ───────────────────────────────── */
-    .section {
-      background: var(--card);
-      border: 1px solid var(--card-border);
-      border-radius: 10px;
-      padding: 20px;
-      margin-bottom: 20px;
-    }
-    .section-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 16px;
-    }
-    .section-title {
-      font-size: 0.85rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      color: var(--cyan);
-    }
-    .badge {
-      font-size: 0.65rem;
-      padding: 3px 8px;
-      border-radius: 4px;
-      font-weight: 600;
-    }
+    /* Badge */
+    .badge { font-size: 0.6rem; padding: 3px 8px; border-radius: 4px; font-weight: 600; }
     .badge-green { background: rgba(34,197,94,0.15); color: var(--green); }
     .badge-red { background: rgba(239,68,68,0.15); color: var(--red); }
     .badge-yellow { background: rgba(234,179,8,0.15); color: var(--yellow); }
     .badge-gray { background: rgba(107,114,128,0.15); color: var(--text-dim); }
+    .badge-cyan { background: rgba(6,182,212,0.15); color: var(--cyan); }
 
-    /* ── Tables ─────────────────────────────────── */
-    table {
-      width: 100%;
-      border-collapse: collapse;
-    }
-    th {
-      text-align: left;
-      font-size: 0.65rem;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      color: var(--text-dim);
-      padding: 8px 12px;
-      border-bottom: 1px solid var(--card-border);
-    }
-    td {
-      padding: 10px 12px;
-      font-size: 0.8rem;
-      border-bottom: 1px solid rgba(30,30,46,0.5);
-    }
+    /* Tables */
+    table { width: 100%; border-collapse: collapse; }
+    th { text-align: left; font-size: 0.6rem; text-transform: uppercase; letter-spacing: 1px; color: var(--text-dim); padding: 6px 10px; border-bottom: 1px solid var(--card-border); }
+    td { padding: 8px 10px; font-size: 0.75rem; border-bottom: 1px solid rgba(30,30,46,0.5); }
     tr:hover td { background: rgba(59,130,246,0.04); }
+    .text-green { color: var(--green); } .text-red { color: var(--red); }
+    .text-yellow { color: var(--yellow); } .text-dim { color: var(--text-dim); }
+    .text-cyan { color: var(--cyan); } .text-bold { font-weight: 600; }
 
-    .text-green { color: var(--green); }
-    .text-red { color: var(--red); }
-    .text-yellow { color: var(--yellow); }
-    .text-dim { color: var(--text-dim); }
-    .text-cyan { color: var(--cyan); }
-    .text-bold { font-weight: 600; }
+    /* Grids */
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+    .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 16px; }
 
-    /* ── PnL bar ────────────────────────────────── */
-    .pnl-bar {
-      display: inline-block;
-      height: 6px;
-      border-radius: 3px;
-      min-width: 4px;
-      max-width: 80px;
-      vertical-align: middle;
-      margin-left: 6px;
-    }
+    /* PnL bar */
+    .pnl-bar { display: inline-block; height: 5px; border-radius: 3px; min-width: 3px; max-width: 60px; vertical-align: middle; margin-left: 4px; }
 
-    /* ── Sentiment ──────────────────────────────── */
-    .sentiment-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-      gap: 12px;
-    }
-    .sentiment-card {
-      background: rgba(10,10,15,0.5);
-      border: 1px solid var(--card-border);
-      border-radius: 8px;
-      padding: 14px;
-    }
-    .sentiment-card-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 10px;
-    }
-    .sentiment-card-symbol { font-weight: 700; font-size: 0.9rem; }
-    .headline {
-      font-size: 0.7rem;
-      color: var(--text-dim);
-      padding: 3px 0;
-      border-bottom: 1px solid rgba(30,30,46,0.3);
-    }
-    .headline:last-child { border-bottom: none; }
-    .headline-icon { margin-right: 6px; }
+    /* Confidence bar */
+    .conf-bar { display: inline-block; height: 6px; border-radius: 3px; vertical-align: middle; }
+    .conf-track { display: inline-block; width: 50px; height: 6px; background: rgba(255,255,255,0.06); border-radius: 3px; position: relative; vertical-align: middle; margin-right: 6px; }
 
-    /* ── Two column ─────────────────────────────── */
-    .two-col {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 20px;
-    }
+    /* Sentiment grid */
+    .sentiment-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(220px,1fr)); gap: 10px; }
+    .sentiment-card { background: rgba(10,10,15,0.5); border: 1px solid var(--card-border); border-radius: 8px; padding: 12px; }
+    .sentiment-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+    .sentiment-card-symbol { font-weight: 700; font-size: 0.85rem; }
+    .headline { font-size: 0.65rem; color: var(--text-dim); padding: 2px 0; }
+    .headline-icon { margin-right: 4px; }
 
-    /* ── Empty state ────────────────────────────── */
-    .empty {
-      text-align: center;
-      padding: 40px 20px;
-      color: var(--text-dim);
-      font-size: 0.8rem;
-    }
-
-    /* ── Market status grid ───────────────────────── */
-    .market-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 16px;
-      margin-bottom: 20px;
-    }
-    .global-table td { padding: 6px 10px; font-size: 0.75rem; }
-    .global-table th { padding: 6px 10px; }
-    .sector-bar {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 6px 0;
-      border-bottom: 1px solid rgba(30,30,46,0.3);
-    }
-    .sector-bar:last-child { border-bottom: none; }
-    .sector-name { width: 120px; font-size: 0.75rem; }
-    .sector-fill {
-      height: 8px;
-      border-radius: 4px;
-      min-width: 2px;
-      transition: width 0.3s ease;
-    }
-    .sector-pct { font-size: 0.7rem; min-width: 50px; text-align: right; }
-    .fii-row {
-      display: flex;
-      justify-content: space-around;
-      gap: 16px;
-      padding: 12px 0;
-    }
+    /* FII row */
+    .fii-row { display: flex; justify-content: space-around; gap: 12px; padding: 10px 0; }
     .fii-block { text-align: center; }
-    .fii-label { font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; }
-    .fii-value { font-size: 1.1rem; font-weight: 700; margin-top: 4px; }
-    .fii-signal { font-size: 0.7rem; margin-top: 2px; }
-    .mood-bar {
-      height: 10px;
-      border-radius: 5px;
-      background: linear-gradient(90deg, var(--red), var(--yellow), var(--green));
-      position: relative;
-      margin: 10px 0;
-    }
-    .mood-indicator {
-      position: absolute;
-      top: -3px;
-      width: 16px; height: 16px;
-      border-radius: 50%;
-      background: white;
-      border: 2px solid var(--bg);
-      transform: translateX(-50%);
-      transition: left 0.5s ease;
-    }
-    .vix-card {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 8px 0;
-    }
-    .vix-label { font-size: 0.75rem; color: var(--text-dim); }
-    .vix-value { font-size: 1.2rem; font-weight: 700; }
+    .fii-label { font-size: 0.6rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; }
+    .fii-value { font-size: 1rem; font-weight: 700; margin-top: 3px; }
+    .fii-signal { font-size: 0.65rem; margin-top: 2px; }
 
-    /* ── Responsive ─────────────────────────────── */
-    @media (max-width: 900px) {
-      .grid { grid-template-columns: repeat(2, 1fr); }
-      .pulse-row { grid-template-columns: 1fr; }
-      .two-col { grid-template-columns: 1fr; }
-      .market-grid { grid-template-columns: 1fr; }
-    }
-    @media (max-width: 600px) {
-      .grid { grid-template-columns: 1fr; }
-    }
+    /* Sector bars */
+    .sector-bar { display: flex; align-items: center; gap: 6px; padding: 4px 0; }
+    .sector-name { width: 100px; font-size: 0.7rem; }
+    .sector-fill { height: 7px; border-radius: 3px; min-width: 2px; transition: width 0.3s; }
+    .sector-pct { font-size: 0.65rem; min-width: 45px; text-align: right; }
+
+    /* Mood bar */
+    .mood-bar { height: 8px; border-radius: 4px; background: linear-gradient(90deg,var(--red),var(--yellow),var(--green)); position: relative; margin: 8px 0 4px; }
+    .mood-indicator { position: absolute; top: -4px; width: 16px; height: 16px; border-radius: 50%; background: white; border: 2px solid var(--bg); transform: translateX(-50%); transition: left 0.5s; }
+
+    /* Score bar inline */
+    .score-fill { display: inline-block; height: 14px; border-radius: 3px; vertical-align: middle; min-width: 2px; font-size: 0.6rem; line-height: 14px; padding: 0 4px; color: var(--bg); font-weight: 600; }
+
+    /* Empty */
+    .empty { text-align: center; padding: 30px; color: var(--text-dim); font-size: 0.75rem; }
+
+    /* Loading shimmer */
+    .loading { background: linear-gradient(90deg,var(--card) 25%,var(--card-border) 50%,var(--card) 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 6px; height: 20px; }
+    @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+
+    /* Responsive */
+    @media (max-width:1100px) { .cards-6 { grid-template-columns: repeat(3,1fr); } }
+    @media (max-width:900px) { .grid-2,.grid-3 { grid-template-columns: 1fr; } .cards-6 { grid-template-columns: repeat(2,1fr); } }
+    @media (max-width:600px) { .cards-6 { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
 
-  <!-- Header -->
-  <div class="header">
-    <h1>TRADEASE</h1>
-    <div class="meta">
-      <span id="last-updated">Loading...</span>
-      <span>Auto-refresh: 60s</span>
-      <div class="status-dot"></div>
-    </div>
+<!-- Header -->
+<div class="header">
+  <h1>TRADEASE</h1>
+  <div class="meta">
+    <span class="badge badge-gray" id="session-badge">--</span>
+    <span id="last-updated">Loading...</span>
+    <div class="status-dot" id="status-dot"></div>
   </div>
+</div>
 
-  <!-- Portfolio Cards -->
-  <div class="grid" id="portfolio-grid">
-    <div class="card">
-      <div class="card-title">Total Capital</div>
-      <div class="card-value" id="total-capital">--</div>
-    </div>
-    <div class="card">
-      <div class="card-title">Available</div>
-      <div class="card-value" id="available-capital">--</div>
-      <div class="card-sub" id="capital-pct">--</div>
-    </div>
-    <div class="card">
-      <div class="card-title">Unrealized P&L</div>
-      <div class="card-value" id="unrealized-pnl">--</div>
-    </div>
-    <div class="card">
-      <div class="card-title">Open Positions</div>
-      <div class="card-value" id="open-positions">--</div>
-      <div class="card-sub" id="max-positions">/ 3 max</div>
-    </div>
+<!-- Top Cards: Nifty, BankNifty, VIX, Capital, P&L, Positions -->
+<div class="cards-6">
+  <div class="card">
+    <div class="card-title">Nifty 50</div>
+    <div class="card-value" id="nifty-price">--</div>
+    <div class="card-sub" id="nifty-change">--</div>
   </div>
-
-  <!-- Market Pulse -->
-  <div class="pulse-row" id="pulse-row">
-    <div class="pulse-card">
-      <div>
-        <div class="pulse-label">NIFTY 50</div>
-        <div class="pulse-price" id="nifty-price">--</div>
-      </div>
-      <div class="pulse-change" id="nifty-change">--</div>
-    </div>
-    <div class="pulse-card">
-      <div>
-        <div class="pulse-label">BANK NIFTY</div>
-        <div class="pulse-price" id="banknifty-price">--</div>
-      </div>
-      <div class="pulse-change" id="banknifty-change">--</div>
-    </div>
-    <div class="pulse-card">
-      <div>
-        <div class="pulse-label">MARKET STATUS</div>
-        <div class="pulse-price" id="market-status">--</div>
-      </div>
-      <div id="market-severity"></div>
-    </div>
+  <div class="card">
+    <div class="card-title">Bank Nifty</div>
+    <div class="card-value" id="banknifty-price">--</div>
+    <div class="card-sub" id="banknifty-change">--</div>
   </div>
-
-  <!-- Market Status: Global + Sectors + FII/DII -->
-  <div class="market-grid">
-    <!-- Global Markets -->
-    <div class="section">
-      <div class="section-header">
-        <span class="section-title">Global Markets</span>
-        <span class="badge badge-gray" id="mood-badge">--</span>
-      </div>
-      <div id="global-container"><div class="empty">Loading...</div></div>
-      <div style="padding:8px 0">
-        <div style="font-size:0.65rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Global Mood</div>
-        <div class="mood-bar"><div class="mood-indicator" id="mood-dot" style="left:50%"></div></div>
-      </div>
-    </div>
-
-    <!-- Sectors + FII/DII -->
-    <div class="section">
-      <div class="section-header">
-        <span class="section-title">Sectors & Flows</span>
-        <span class="badge badge-gray" id="session-badge">--</span>
-      </div>
-      <!-- FII/DII -->
-      <div id="fii-container" style="margin-bottom:12px"><div class="empty">Loading...</div></div>
-      <div style="font-size:0.65rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Sector Rotation</div>
-      <div id="sector-container"><div class="empty">Loading...</div></div>
-    </div>
+  <div class="card">
+    <div class="card-title">India VIX</div>
+    <div class="card-value" id="vix-price">--</div>
+    <div class="card-sub" id="vix-change">--</div>
   </div>
+  <div class="card">
+    <div class="card-title">Capital</div>
+    <div class="card-value" id="total-capital">--</div>
+    <div class="card-sub" id="available-capital">--</div>
+  </div>
+  <div class="card">
+    <div class="card-title">Unrealized P&L</div>
+    <div class="card-value" id="unrealized-pnl">--</div>
+    <div class="card-sub" id="market-severity">--</div>
+  </div>
+  <div class="card">
+    <div class="card-title">Positions</div>
+    <div class="card-value" id="open-positions">--</div>
+    <div class="card-sub">/ 3 max</div>
+  </div>
+</div>
 
-  <!-- Open Trades -->
+<!-- Row 2: Global Markets | FII/DII + Sectors -->
+<div class="grid-2">
   <div class="section">
     <div class="section-header">
-      <span class="section-title">Open Trades</span>
-      <span class="badge badge-green" id="trade-count">0 active</span>
+      <span class="section-title">Global Markets</span>
+      <span class="badge badge-gray" id="mood-badge">--</span>
     </div>
-    <div id="trades-container">
-      <div class="empty">No open trades</div>
-    </div>
-  </div>
-
-  <!-- Two-column: Stats + Sentiment -->
-  <div class="two-col">
-    <!-- Performance Stats -->
-    <div class="section">
-      <div class="section-header">
-        <span class="section-title">Performance (30d)</span>
-      </div>
-      <div id="stats-container">
-        <div class="empty">Loading...</div>
-      </div>
-    </div>
-
-    <!-- News Sentiment -->
-    <div class="section">
-      <div class="section-header">
-        <span class="section-title">News Sentiment</span>
-        <span class="badge badge-gray" id="news-badge">positions</span>
-      </div>
-      <div id="news-container">
-        <div class="empty">No open positions to monitor</div>
-      </div>
+    <div id="global-container"><div class="loading" style="height:200px"></div></div>
+    <div style="margin-top:8px">
+      <div style="font-size:0.55rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px">Global Mood</div>
+      <div class="mood-bar"><div class="mood-indicator" id="mood-dot" style="left:50%"></div></div>
     </div>
   </div>
+  <div class="section">
+    <div class="section-header">
+      <span class="section-title">FII/DII & Sectors</span>
+    </div>
+    <div id="fii-container"></div>
+    <div style="font-size:0.55rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;margin:8px 0 6px">Sector Rotation</div>
+    <div id="sector-container"><div class="loading" style="height:150px"></div></div>
+  </div>
+</div>
 
-  <!-- Recent History -->
+<!-- Top 15 Picks -->
+<div class="section">
+  <div class="section-header">
+    <span class="section-title">Top 15 Screener Picks</span>
+    <span class="badge badge-cyan" id="picks-badge">loading...</span>
+  </div>
+  <div id="picks-container"><div class="loading" style="height:200px"></div></div>
+</div>
+
+<!-- News & Sentiment for Top Stocks -->
+<div class="section">
+  <div class="section-header">
+    <span class="section-title">News & Sentiment</span>
+    <span class="badge badge-gray" id="news-badge">top stocks</span>
+  </div>
+  <div id="news-container"><div class="loading" style="height:150px"></div></div>
+</div>
+
+<!-- Open Trades -->
+<div class="section">
+  <div class="section-header">
+    <span class="section-title">Open Trades</span>
+    <span class="badge badge-green" id="trade-count">0 active</span>
+  </div>
+  <div id="trades-container"><div class="empty">No open trades</div></div>
+</div>
+
+<!-- Stats + History -->
+<div class="grid-2">
+  <div class="section">
+    <div class="section-header"><span class="section-title">Performance (30d)</span></div>
+    <div id="stats-container"><div class="empty">Loading...</div></div>
+  </div>
   <div class="section">
     <div class="section-header">
       <span class="section-title">Recent Trades</span>
-      <span class="badge badge-gray" id="history-badge">last 30d</span>
+      <span class="badge badge-gray" id="history-badge">--</span>
     </div>
-    <div id="history-container">
-      <div class="empty">No trade history</div>
-    </div>
+    <div id="history-container"><div class="empty">Loading...</div></div>
   </div>
+</div>
 
 <script>
-  const INR = (n) => {
-    if (n == null || isNaN(n)) return '₹0';
-    const neg = n < 0;
-    const s = Math.abs(n).toLocaleString('en-IN', { maximumFractionDigits: 0 });
-    return `${neg ? '-' : ''}₹${s}`;
-  };
+const INR = n => { if(n==null||isNaN(n))return'₹0'; const neg=n<0; return`${neg?'-':''}₹${Math.abs(n).toLocaleString('en-IN',{maximumFractionDigits:0})}`; };
+const pct = n => { if(n==null||isNaN(n))return'0.0%'; return`${n>=0?'+':''}${n.toFixed(1)}%`; };
+const pc = n => n>=0?'text-green':'text-red';
 
-  const pct = (n) => {
-    if (n == null || isNaN(n)) return '0.0%';
-    return `${n >= 0 ? '+' : ''}${n.toFixed(1)}%`;
-  };
+// ── Top cards ──
+function renderTopCards(pulse, portfolio, global) {
+  const n = pulse?.nifty||{}, b = pulse?.bankNifty||{};
+  document.getElementById('nifty-price').textContent = n.price?n.price.toLocaleString('en-IN'):'--';
+  const nc = document.getElementById('nifty-change'); nc.textContent=pct(n.changePct); nc.className=`card-sub ${pc(n.changePct||0)}`;
+  document.getElementById('banknifty-price').textContent = b.price?b.price.toLocaleString('en-IN'):'--';
+  const bc = document.getElementById('banknifty-change'); bc.textContent=pct(b.changePct); bc.className=`card-sub ${pc(b.changePct||0)}`;
 
-  const pnlClass = (n) => n >= 0 ? 'text-green' : 'text-red';
+  const vix = global?.volatility?.vix;
+  if(vix) {
+    const vp = document.getElementById('vix-price');
+    vp.textContent = vix.price?.toFixed(1)||'--';
+    vp.className = `card-value ${vix.price>20?'text-red':vix.price>15?'text-yellow':'text-green'}`;
+    const vc = document.getElementById('vix-change'); vc.textContent=pct(vix.changePct); vc.className=`card-sub ${(vix.changePct||0)>=0?'text-red':'text-green'}`;
+  }
 
-  function renderTrades(trades) {
-    const el = document.getElementById('trades-container');
-    document.getElementById('trade-count').textContent = `${trades.length} active`;
+  if(portfolio) {
+    document.getElementById('total-capital').textContent = INR(portfolio.totalCapital);
+    document.getElementById('available-capital').textContent = `${INR(portfolio.availableCapital)} free`;
+    const pe = document.getElementById('unrealized-pnl'); pe.textContent=INR(portfolio.unrealizedPnl); pe.className=`card-value ${pc(portfolio.unrealizedPnl||0)}`;
+    document.getElementById('open-positions').textContent = portfolio.openPositions||0;
+  }
 
-    if (!trades.length) {
-      el.innerHTML = '<div class="empty">No open trades</div>';
-      return;
-    }
+  const sev = pulse?.severity||'normal';
+  const se = document.getElementById('market-severity');
+  se.textContent = sev.toUpperCase();
+  se.className = `card-sub ${sev==='critical'?'text-red':sev==='warning'?'text-yellow':'text-green'}`;
+}
 
-    const rows = trades.map(t => {
-      const pnl = t.live_pnl || 0;
-      const pnlP = t.live_pnl_pct || 0;
-      const barWidth = Math.min(Math.abs(pnlP) * 2, 80);
-      const barColor = pnl >= 0 ? 'var(--green)' : 'var(--red)';
-      const typeClass = t.type === 'CALL' ? 'text-green' : 'text-red';
-      const t1Status = t.t1_hit ? '✓' : '·';
-      const t2Status = t.t2_hit ? '✓' : '·';
+// ── Global markets ──
+function renderGlobal(g) {
+  const el = document.getElementById('global-container');
+  if(!g){el.innerHTML='<div class="empty">No data</div>';return;}
+  const rows=[];
+  const add=(name,q)=>{if(!q)return;rows.push(`<tr><td class="text-dim">${name}</td><td>${q.price?.toFixed(1)||'--'}</td><td class="${pc(q.changePct||0)}">${pct(q.changePct)}</td></tr>`);};
+  add('S&P 500',g.us?.sp500); add('Nasdaq',g.us?.nasdaq); add('Dow Jones',g.us?.dow);
+  add('Nikkei',g.asia?.nikkei); add('Hang Seng',g.asia?.hangSeng);
+  add('Crude WTI',g.commodities?.crudeWTI); add('Gold',g.commodities?.gold);
+  add('Dollar Index',g.currencies?.dollarIndex); add('US 10Y',g.bonds?.us10y);
+  el.innerHTML=`<table><thead><tr><th>Market</th><th>Price</th><th>Chg</th></tr></thead><tbody>${rows.join('')}</tbody></table>`;
 
-      return `<tr>
-        <td class="text-bold">${t.symbol}</td>
-        <td class="${typeClass} text-bold">${t.type}</td>
-        <td>${INR(t.entry_price)}</td>
-        <td>${INR(t.current_price || t.entry_price)}</td>
-        <td class="text-red">${INR(t.stop_loss)}</td>
-        <td>T1:${t1Status} T2:${t2Status}</td>
-        <td class="${pnlClass(pnl)}">
-          ${INR(pnl)} (${pct(pnlP)})
-          <span class="pnl-bar" style="width:${barWidth}px;background:${barColor}"></span>
-        </td>
-        <td class="text-dim">${t.quantity || 1} lots</td>
-        <td>${INR(t.capital_used)}</td>
-      </tr>`;
+  const score=g.sentimentScore||0, sent=g.sentiment||'MIXED';
+  const mb=document.getElementById('mood-badge');
+  mb.textContent=sent; mb.className=`badge ${sent==='BULLISH'?'badge-green':sent==='BEARISH'?'badge-red':'badge-yellow'}`;
+  document.getElementById('mood-dot').style.left=`${((score+100)/200)*100}%`;
+}
+
+// ── FII/DII ──
+function renderFiiDii(f) {
+  const el=document.getElementById('fii-container'); if(!f){el.innerHTML='';return;}
+  const cr=v=>{if(v==null)return'--';return`${v>=0?'+':''}₹${Math.abs(v).toLocaleString('en-IN')} Cr`;};
+  const fn=f.fii?.netValue, dn=f.dii?.netValue;
+  el.innerHTML=`<div class="fii-row">
+    <div class="fii-block"><div class="fii-label">FII</div><div class="fii-value ${pc(fn||0)}">${cr(fn)}</div><div class="fii-signal ${pc(fn||0)}">${f.fii?.signal||'--'}</div></div>
+    <div class="fii-block"><div class="fii-label">DII</div><div class="fii-value ${pc(dn||0)}">${cr(dn)}</div><div class="fii-signal ${pc(dn||0)}">${f.dii?.signal||'--'}</div></div>
+    <div class="fii-block"><div class="fii-label">Flow</div><div class="fii-value ${f.sentiment==='BULLISH'?'text-green':f.sentiment==='BEARISH'?'text-red':'text-yellow'}">${f.sentiment||'--'}</div></div>
+  </div>`;
+}
+
+// ── Sectors ──
+function renderSectors(s) {
+  const el=document.getElementById('sector-container');
+  if(!s||!s.length){el.innerHTML='<div class="text-dim" style="font-size:0.7rem">No data</div>';return;}
+  const sorted=[...s].sort((a,b)=>(b.todayChange||0)-(a.todayChange||0));
+  const mx=Math.max(...sorted.map(x=>Math.abs(x.todayChange||0)),1);
+  el.innerHTML=sorted.map(x=>{
+    const c=x.todayChange||0, w=Math.max(2,(Math.abs(c)/mx)*100);
+    return`<div class="sector-bar"><span class="sector-name">${(x.sector||'').replace('Nifty ','')}</span><span class="sector-fill" style="width:${w}%;background:${c>=0?'var(--green)':'var(--red)'}"></span><span class="sector-pct ${pc(c)}">${pct(c)}</span></div>`;
+  }).join('');
+}
+
+// ── Top 15 Picks ──
+function renderPicks(picks) {
+  const el=document.getElementById('picks-container');
+  document.getElementById('picks-badge').textContent=`${picks.length} stocks`;
+  if(!picks.length){el.innerHTML='<div class="empty">Run a scan first to see picks</div>';return;}
+
+  const maxScore=Math.max(...picks.map(p=>p.score||0),1);
+  const rows=picks.map((p,i)=>{
+    const sc=p.score||0, sw=Math.max(4,(sc/maxScore)*100);
+    const scColor=sc>=70?'var(--green)':sc>=50?'var(--yellow)':'var(--red)';
+    const rec=p.recommendation||'--';
+    const recClass=rec==='CALL'?'text-green':rec==='PUT'?'text-red':'text-dim';
+    const rsi=p.rsi!=null?p.rsi.toFixed(0):'--';
+    const rsiClass=p.rsi>70?'text-red':p.rsi<30?'text-green':'text-dim';
+    const macd=p.macdTrend||'--';
+    const macdClass=macd.includes('bullish')?'text-green':macd.includes('bearish')?'text-red':'text-dim';
+    const volR=p.volumeRatio!=null?p.volumeRatio.toFixed(1)+'x':'--';
+    const volClass=p.volumeRatio>1.5?'text-green':p.volumeRatio<0.5?'text-red':'text-dim';
+
+    return`<tr>
+      <td class="text-dim">${i+1}</td>
+      <td class="text-bold">${p.symbol}</td>
+      <td class="text-dim">${p.sector||'--'}</td>
+      <td>₹${(p.price||0).toLocaleString('en-IN')}</td>
+      <td class="${pc(p.changePct||0)}">${pct(p.changePct)}</td>
+      <td><div class="conf-track"><span class="score-fill" style="position:absolute;left:0;top:0;width:${sw}%;background:${scColor}">${sc.toFixed(0)}</span></div></td>
+      <td class="${recClass} text-bold">${rec}</td>
+      <td class="${rsiClass}">${rsi}</td>
+      <td class="${macdClass}">${macd.replace('_',' ')}</td>
+      <td class="${volClass}">${volR}</td>
+    </tr>`;
+  }).join('');
+
+  el.innerHTML=`<table><thead><tr><th>#</th><th>Symbol</th><th>Sector</th><th>Price</th><th>Chg%</th><th>Score</th><th>Signal</th><th>RSI</th><th>MACD</th><th>Vol</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+// ── News Sentiment ──
+function renderNews(news) {
+  const el=document.getElementById('news-container');
+  document.getElementById('news-badge').textContent=`${news.length} stocks`;
+  if(!news.length){el.innerHTML='<div class="empty">No news data yet</div>';return;}
+
+  const sorted=[...news].sort((a,b)=>Math.abs(b.totalScore)-Math.abs(a.totalScore));
+  const cards=sorted.map(n=>{
+    const sc=n.sentiment.includes('positive')?'text-green':n.sentiment.includes('negative')?'text-red':'text-dim';
+    const sl=n.sentiment.replace('very_','').replace('_',' ').toUpperCase();
+    const ss=n.totalScore>0?'+':'';
+    const hl=n.headlines.slice(0,3).map(h=>{
+      const ic=h.score>0?'<span class="headline-icon text-green">+</span>':h.score<0?'<span class="headline-icon text-red">-</span>':'<span class="headline-icon text-dim">·</span>';
+      const t=h.title.length>55?h.title.slice(0,52)+'...':h.title;
+      const lnk=h.link?`<a href="${h.link}" target="_blank" style="color:inherit;text-decoration:none">${t}</a>`:t;
+      return`<div class="headline">${ic}${lnk}</div>`;
     }).join('');
+    return`<div class="sentiment-card"><div class="sentiment-card-header"><span class="sentiment-card-symbol">${n.symbol}</span><span class="${sc} text-bold">${sl}(${ss}${n.totalScore})</span></div>${hl||'<div class="text-dim" style="font-size:0.65rem">No news</div>'}<div class="text-dim" style="font-size:0.6rem;margin-top:4px">${n.newsCount} articles</div></div>`;
+  }).join('');
+  el.innerHTML=`<div class="sentiment-grid">${cards}</div>`;
+}
 
-    el.innerHTML = `<table>
-      <thead><tr>
-        <th>Symbol</th><th>Type</th><th>Entry</th><th>Current</th>
-        <th>SL</th><th>Targets</th><th>P&L</th><th>Qty</th><th>Capital</th>
-      </tr></thead>
-      <tbody>${rows}</tbody>
-    </table>`;
+// ── Open Trades ──
+function renderTrades(trades) {
+  const el=document.getElementById('trades-container');
+  document.getElementById('trade-count').textContent=`${trades.length} active`;
+  if(!trades.length){el.innerHTML='<div class="empty">No open trades</div>';return;}
+  const rows=trades.map(t=>{
+    const pnl=t.live_pnl||0, pp=t.live_pnl_pct||0, bw=Math.min(Math.abs(pp)*2,60);
+    return`<tr>
+      <td class="text-bold">${t.symbol}</td>
+      <td class="${t.type==='CALL'?'text-green':'text-red'} text-bold">${t.type}</td>
+      <td>${INR(t.entry_price)}</td><td>${INR(t.current_price||t.entry_price)}</td>
+      <td class="text-red">${INR(t.stop_loss)}</td>
+      <td>T1:${t.t1_hit?'✓':'·'} T2:${t.t2_hit?'✓':'·'}</td>
+      <td class="${pc(pnl)}">${INR(pnl)}(${pct(pp)})<span class="pnl-bar" style="width:${bw}px;background:${pnl>=0?'var(--green)':'var(--red)'}"></span></td>
+      <td class="text-dim">${t.quantity||1}L</td>
+      <td>${INR(t.capital_used)}</td>
+    </tr>`;
+  }).join('');
+  el.innerHTML=`<table><thead><tr><th>Symbol</th><th>Type</th><th>Entry</th><th>Current</th><th>SL</th><th>Targets</th><th>P&L</th><th>Qty</th><th>Capital</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+// ── Stats ──
+function renderStats(s) {
+  const el=document.getElementById('stats-container');
+  if(!s){el.innerHTML='<div class="empty">No data</div>';return;}
+  const wr=s.winRate||0, wc=wr>=60?'text-green':wr>=40?'text-yellow':'text-red';
+  el.innerHTML=`<table>
+    <tr><td class="text-dim">Trades</td><td class="text-bold">${s.totalTrades||0}</td></tr>
+    <tr><td class="text-dim">W/L</td><td><span class="text-green">${s.wins||0}W</span>/<span class="text-red">${s.losses||0}L</span></td></tr>
+    <tr><td class="text-dim">Win Rate</td><td class="${wc} text-bold">${wr}%</td></tr>
+    <tr><td class="text-dim">Total P&L</td><td class="${pc(s.totalPnl||0)} text-bold">${INR(s.totalPnl)}</td></tr>
+    <tr><td class="text-dim">Avg Win</td><td class="text-green">${INR(s.avgWin)}</td></tr>
+    <tr><td class="text-dim">Avg Loss</td><td class="text-red">${INR(s.avgLoss)}</td></tr>
+    <tr><td class="text-dim">Best</td><td class="text-green">${INR(s.bestTrade)}</td></tr>
+    <tr><td class="text-dim">Worst</td><td class="text-red">${INR(s.worstTrade)}</td></tr>
+  </table>`;
+}
+
+// ── History ──
+function renderHistory(h) {
+  const el=document.getElementById('history-container');
+  document.getElementById('history-badge').textContent=`${h.length} trades`;
+  if(!h.length){el.innerHTML='<div class="empty">No history</div>';return;}
+  const rows=h.map(t=>{
+    const pnl=t.pnl||0;
+    const st=t.status==='STOPPED'?'badge-red':pnl>=0?'badge-green':'badge-red';
+    const sl=t.status==='STOPPED'?'STOP':pnl>=0?'WIN':'LOSS';
+    const d=t.exited_at?new Date(t.exited_at).toLocaleDateString('en-IN',{day:'2-digit',month:'short'}):'--';
+    return`<tr><td class="text-dim">${d}</td><td class="text-bold">${t.symbol}</td><td class="${t.type==='CALL'?'text-green':'text-red'}">${t.type}</td><td>${INR(t.entry_price)}</td><td>${INR(t.exit_price)}</td><td class="${pc(pnl)} text-bold">${INR(pnl)}</td><td><span class="badge ${st}">${sl}</span></td></tr>`;
+  }).join('');
+  el.innerHTML=`<table><thead><tr><th>Date</th><th>Symbol</th><th>Type</th><th>Entry</th><th>Exit</th><th>P&L</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+// ── Session ──
+function renderSession(ms) {
+  if(!ms)return;
+  const sb=document.getElementById('session-badge');
+  sb.textContent=ms.session;
+  sb.className=`badge ${ms.session==='OPEN'?'badge-green':ms.session==='CLOSED'?'badge-gray':'badge-yellow'}`;
+  const dot=document.getElementById('status-dot');
+  dot.style.background=ms.session==='OPEN'?'var(--green)':ms.session==='CLOSED'?'var(--text-dim)':'var(--yellow)';
+}
+
+// ── Master refresh ──
+async function refresh() {
+  try {
+    const [dash, market, picks, news] = await Promise.all([
+      fetch('/api/dashboard').then(r=>r.json()),
+      fetch('/api/market-status').then(r=>r.json()).catch(()=>null),
+      fetch('/api/top-picks').then(r=>r.json()).catch(()=>[]),
+      fetch('/api/news-digest').then(r=>r.json()).catch(()=>[]),
+    ]);
+
+    renderTopCards(dash.pulse, dash.portfolio, market?.global);
+    renderSession(market);
+    renderGlobal(market?.global);
+    renderFiiDii(market?.fiiDii);
+    renderSectors(market?.sectors);
+    renderPicks(picks);
+    renderNews(news);
+    renderTrades(dash.trades||[]);
+    renderStats(dash.stats);
+    renderHistory(dash.history||[]);
+
+    document.getElementById('last-updated').textContent = `Updated: ${new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}`;
+  } catch(err) {
+    console.error('Refresh failed:',err);
+    document.getElementById('last-updated').textContent=`Error: ${err.message}`;
   }
+}
 
-  function renderPulse(pulse) {
-    if (!pulse) return;
-
-    const nifty = pulse.nifty || {};
-    const bank = pulse.bankNifty || {};
-
-    document.getElementById('nifty-price').textContent =
-      nifty.price ? nifty.price.toLocaleString('en-IN') : '--';
-    const nChg = document.getElementById('nifty-change');
-    nChg.textContent = pct(nifty.changePct);
-    nChg.className = `pulse-change ${pnlClass(nifty.changePct || 0)}`;
-
-    document.getElementById('banknifty-price').textContent =
-      bank.price ? bank.price.toLocaleString('en-IN') : '--';
-    const bChg = document.getElementById('banknifty-change');
-    bChg.textContent = pct(bank.changePct);
-    bChg.className = `pulse-change ${pnlClass(bank.changePct || 0)}`;
-
-    const sev = pulse.severity || 'normal';
-    const sevEl = document.getElementById('market-severity');
-    const statusEl = document.getElementById('market-status');
-    statusEl.textContent = sev.toUpperCase();
-    if (sev === 'critical') {
-      sevEl.innerHTML = '<span class="badge badge-red">CRITICAL</span>';
-      statusEl.className = 'pulse-price text-red';
-    } else if (sev === 'warning') {
-      sevEl.innerHTML = '<span class="badge badge-yellow">WARNING</span>';
-      statusEl.className = 'pulse-price text-yellow';
-    } else {
-      sevEl.innerHTML = '<span class="badge badge-green">NORMAL</span>';
-      statusEl.className = 'pulse-price text-green';
-    }
-  }
-
-  function renderPortfolio(p) {
-    if (!p) return;
-    document.getElementById('total-capital').textContent = INR(p.totalCapital);
-    document.getElementById('available-capital').textContent = INR(p.availableCapital);
-    document.getElementById('capital-pct').textContent =
-      p.totalCapital ? `${((p.availableCapital / p.totalCapital) * 100).toFixed(0)}% free` : '';
-    const pnlEl = document.getElementById('unrealized-pnl');
-    pnlEl.textContent = INR(p.unrealizedPnl);
-    pnlEl.className = `card-value ${pnlClass(p.unrealizedPnl || 0)}`;
-    document.getElementById('open-positions').textContent = p.openPositions || 0;
-  }
-
-  function renderStats(stats) {
-    const el = document.getElementById('stats-container');
-    if (!stats) { el.innerHTML = '<div class="empty">No data</div>'; return; }
-
-    const wr = stats.winRate || 0;
-    const wrColor = wr >= 60 ? 'text-green' : wr >= 40 ? 'text-yellow' : 'text-red';
-
-    el.innerHTML = `<table>
-      <tr><td class="text-dim">Total Trades</td><td class="text-bold">${stats.totalTrades || 0}</td></tr>
-      <tr><td class="text-dim">Wins / Losses</td><td><span class="text-green">${stats.wins || 0}W</span> / <span class="text-red">${stats.losses || 0}L</span></td></tr>
-      <tr><td class="text-dim">Win Rate</td><td class="${wrColor} text-bold">${wr}%</td></tr>
-      <tr><td class="text-dim">Total P&L</td><td class="${pnlClass(stats.totalPnl || 0)} text-bold">${INR(stats.totalPnl)}</td></tr>
-      <tr><td class="text-dim">Avg Win</td><td class="text-green">${INR(stats.avgWin)}</td></tr>
-      <tr><td class="text-dim">Avg Loss</td><td class="text-red">${INR(stats.avgLoss)}</td></tr>
-      <tr><td class="text-dim">Best Trade</td><td class="text-green">${INR(stats.bestTrade)}</td></tr>
-      <tr><td class="text-dim">Worst Trade</td><td class="text-red">${INR(stats.worstTrade)}</td></tr>
-    </table>`;
-  }
-
-  function renderHistory(history) {
-    const el = document.getElementById('history-container');
-    document.getElementById('history-badge').textContent = `${history.length} trades`;
-
-    if (!history.length) {
-      el.innerHTML = '<div class="empty">No trade history</div>';
-      return;
-    }
-
-    const rows = history.map(t => {
-      const pnl = t.pnl || 0;
-      const status = t.status === 'STOPPED' ? 'badge-red' : pnl >= 0 ? 'badge-green' : 'badge-red';
-      const statusLabel = t.status === 'STOPPED' ? 'STOPPED' : pnl >= 0 ? 'WIN' : 'LOSS';
-      const date = t.exited_at ? new Date(t.exited_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) : '--';
-
-      return `<tr>
-        <td class="text-dim">${date}</td>
-        <td class="text-bold">${t.symbol}</td>
-        <td class="${t.type === 'CALL' ? 'text-green' : 'text-red'}">${t.type}</td>
-        <td>${INR(t.entry_price)}</td>
-        <td>${INR(t.exit_price)}</td>
-        <td class="${pnlClass(pnl)} text-bold">${INR(pnl)}</td>
-        <td><span class="badge ${status}">${statusLabel}</span></td>
-        <td class="text-dim" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.exit_reason || '--'}</td>
-      </tr>`;
-    }).join('');
-
-    el.innerHTML = `<table>
-      <thead><tr>
-        <th>Date</th><th>Symbol</th><th>Type</th><th>Entry</th><th>Exit</th><th>P&L</th><th>Result</th><th>Reason</th>
-      </tr></thead>
-      <tbody>${rows}</tbody>
-    </table>`;
-  }
-
-  function renderNews(newsData) {
-    const el = document.getElementById('news-container');
-    document.getElementById('news-badge').textContent = `${newsData.length} positions`;
-
-    if (!newsData.length) {
-      el.innerHTML = '<div class="empty">No open positions to monitor</div>';
-      return;
-    }
-
-    const cards = newsData.map(n => {
-      const sentClass = n.sentiment.includes('positive') ? 'text-green'
-        : n.sentiment.includes('negative') ? 'text-red'
-        : 'text-dim';
-      const sentLabel = n.sentiment.replace('very_', '').replace('_', ' ').toUpperCase();
-      const scoreSign = n.totalScore > 0 ? '+' : '';
-
-      const headlines = n.headlines.map(h => {
-        const icon = h.score > 0 ? '<span class="headline-icon text-green">+</span>'
-          : h.score < 0 ? '<span class="headline-icon text-red">-</span>'
-          : '<span class="headline-icon text-dim">·</span>';
-        const title = h.title.length > 60 ? h.title.slice(0, 57) + '...' : h.title;
-        const link = h.link ? `<a href="${h.link}" target="_blank" style="color:inherit;text-decoration:none">${title}</a>` : title;
-        return `<div class="headline">${icon}${link}</div>`;
-      }).join('');
-
-      return `<div class="sentiment-card">
-        <div class="sentiment-card-header">
-          <span class="sentiment-card-symbol">${n.symbol}</span>
-          <span class="${sentClass} text-bold">${sentLabel} (${scoreSign}${n.totalScore})</span>
-        </div>
-        ${headlines || '<div class="text-dim" style="font-size:0.7rem">No news found</div>'}
-        <div class="text-dim" style="font-size:0.65rem;margin-top:6px">${n.newsCount} article(s)</div>
-      </div>`;
-    }).join('');
-
-    el.innerHTML = `<div class="sentiment-grid">${cards}</div>`;
-  }
-
-  // ── Market Status renderers ──────────────────────────────
-
-  function renderGlobal(global) {
-    const el = document.getElementById('global-container');
-    const moodBadge = document.getElementById('mood-badge');
-    const moodDot = document.getElementById('mood-dot');
-
-    if (!global) { el.innerHTML = '<div class="empty">No data</div>'; return; }
-
-    const rows = [];
-    const addRow = (name, q) => {
-      if (!q) return;
-      const chgClass = (q.changePct || 0) >= 0 ? 'text-green' : 'text-red';
-      rows.push(`<tr>
-        <td class="text-dim">${name}</td>
-        <td>${q.price?.toFixed(1) || '--'}</td>
-        <td class="${chgClass}">${pct(q.changePct)}</td>
-      </tr>`);
-    };
-
-    addRow('S&P 500', global.us?.sp500);
-    addRow('Nasdaq', global.us?.nasdaq);
-    addRow('Dow Jones', global.us?.dow);
-    addRow('Nikkei 225', global.asia?.nikkei);
-    addRow('Hang Seng', global.asia?.hangSeng);
-    addRow('Crude WTI', global.commodities?.crudeWTI);
-    addRow('Gold', global.commodities?.gold);
-    addRow('Dollar Index', global.currencies?.dollarIndex);
-    addRow('US 10Y', global.bonds?.us10y);
-
-    const vix = global.volatility?.vix;
-    if (vix) {
-      const vixClass = vix.price > 20 ? 'text-red' : vix.price > 15 ? 'text-yellow' : 'text-green';
-      rows.push(`<tr>
-        <td class="text-dim">VIX</td>
-        <td class="${vixClass} text-bold">${vix.price?.toFixed(1)}</td>
-        <td class="${(vix.changePct || 0) >= 0 ? 'text-red' : 'text-green'}">${pct(vix.changePct)}</td>
-      </tr>`);
-    }
-
-    el.innerHTML = `<table class="global-table">
-      <thead><tr><th>Market</th><th>Price</th><th>Change</th></tr></thead>
-      <tbody>${rows.join('')}</tbody>
-    </table>`;
-
-    // Mood
-    const score = global.sentimentScore || 0;
-    const sentiment = global.sentiment || 'MIXED';
-    const sentClass = sentiment === 'BULLISH' ? 'badge-green' : sentiment === 'BEARISH' ? 'badge-red' : 'badge-yellow';
-    moodBadge.textContent = sentiment;
-    moodBadge.className = `badge ${sentClass}`;
-    // Map -100..+100 to 0%..100%
-    moodDot.style.left = `${((score + 100) / 200) * 100}%`;
-  }
-
-  function renderFiiDii(fiiDii) {
-    const el = document.getElementById('fii-container');
-    if (!fiiDii) { el.innerHTML = ''; return; }
-
-    const fmtCr = (val) => {
-      if (val == null) return '--';
-      const sign = val >= 0 ? '+' : '';
-      return `${sign}₹${Math.abs(val).toLocaleString('en-IN')} Cr`;
-    };
-
-    const fiiNet = fiiDii.fii?.netValue;
-    const diiNet = fiiDii.dii?.netValue;
-    const fiiClass = (fiiNet || 0) >= 0 ? 'text-green' : 'text-red';
-    const diiClass = (diiNet || 0) >= 0 ? 'text-green' : 'text-red';
-    const fiiSignal = fiiDii.fii?.signal || '--';
-    const diiSignal = fiiDii.dii?.signal || '--';
-    const sentClass = fiiDii.sentiment === 'BULLISH' ? 'text-green' : fiiDii.sentiment === 'BEARISH' ? 'text-red' : 'text-yellow';
-
-    el.innerHTML = `<div class="fii-row">
-      <div class="fii-block">
-        <div class="fii-label">FII</div>
-        <div class="fii-value ${fiiClass}">${fmtCr(fiiNet)}</div>
-        <div class="fii-signal ${fiiClass}">${fiiSignal}</div>
-      </div>
-      <div class="fii-block">
-        <div class="fii-label">DII</div>
-        <div class="fii-value ${diiClass}">${fmtCr(diiNet)}</div>
-        <div class="fii-signal ${diiClass}">${diiSignal}</div>
-      </div>
-      <div class="fii-block">
-        <div class="fii-label">Flow</div>
-        <div class="fii-value ${sentClass}">${fiiDii.sentiment || '--'}</div>
-      </div>
-    </div>`;
-  }
-
-  function renderSectors(sectors) {
-    const el = document.getElementById('sector-container');
-    if (!sectors || !sectors.length) { el.innerHTML = '<div class="text-dim" style="font-size:0.75rem">No sector data</div>'; return; }
-
-    const sorted = [...sectors].sort((a, b) => (b.todayChange || 0) - (a.todayChange || 0));
-    const maxAbs = Math.max(...sorted.map(s => Math.abs(s.todayChange || 0)), 1);
-
-    const bars = sorted.map(s => {
-      const chg = s.todayChange || 0;
-      const width = Math.max(2, (Math.abs(chg) / maxAbs) * 100);
-      const color = chg >= 0 ? 'var(--green)' : 'var(--red)';
-      const chgClass = chg >= 0 ? 'text-green' : 'text-red';
-      const name = (s.sector || '--').replace('Nifty ', '');
-
-      return `<div class="sector-bar">
-        <span class="sector-name">${name}</span>
-        <span class="sector-fill" style="width:${width}%;background:${color}"></span>
-        <span class="sector-pct ${chgClass}">${pct(chg)}</span>
-      </div>`;
-    }).join('');
-
-    el.innerHTML = bars;
-  }
-
-  function renderMarketStatus(ms) {
-    if (!ms) return;
-
-    // Session badge
-    const sessionEl = document.getElementById('session-badge');
-    const sessionClass = ms.session === 'OPEN' ? 'badge-green'
-      : ms.session === 'CLOSED' ? 'badge-gray' : 'badge-yellow';
-    sessionEl.textContent = ms.session;
-    sessionEl.className = `badge ${sessionClass}`;
-
-    // Header dot color
-    const dot = document.querySelector('.status-dot');
-    dot.style.background = ms.session === 'OPEN' ? 'var(--green)'
-      : ms.session === 'CLOSED' ? 'var(--text-dim)' : 'var(--yellow)';
-
-    renderGlobal(ms.global);
-    renderFiiDii(ms.fiiDii);
-    renderSectors(ms.sectors);
-
-    // Also update pulse from market-status indices if available
-    if (ms.indices) renderPulse(ms.indices);
-  }
-
-  // ── Fetch & render ──────────────────────────────────────
-  async function refresh() {
-    try {
-      const [dashRes, newsRes, marketRes] = await Promise.all([
-        fetch('/api/dashboard').then(r => r.json()),
-        fetch('/api/news').then(r => r.json()).catch(() => []),
-        fetch('/api/market-status').then(r => r.json()).catch(() => null),
-      ]);
-
-      renderPortfolio(dashRes.portfolio);
-      renderTrades(dashRes.trades || []);
-      renderPulse(dashRes.pulse);
-      renderStats(dashRes.stats);
-      renderHistory(dashRes.history || []);
-      renderNews(newsRes);
-      renderMarketStatus(marketRes);
-
-      const now = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-      document.getElementById('last-updated').textContent = `Updated: ${now}`;
-    } catch (err) {
-      console.error('Refresh failed:', err);
-      document.getElementById('last-updated').textContent = `Error: ${err.message}`;
-    }
-  }
-
-  // Initial load + auto-refresh
-  refresh();
-  setInterval(refresh, 60000);
+refresh();
+setInterval(refresh, 60000);
 </script>
-
 </body>
 </html>
