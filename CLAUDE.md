@@ -28,6 +28,8 @@ AI-powered Indian F&O trading decision system. Uses Claude Code CLI as analysis 
 - `tradease scan` — Pre-market scan, find top trades
 - `tradease research quick <SYMBOL>` — Quick analysis
 - `tradease research deep <SYMBOL>` — Deep analysis
+- `tradease news` — Top 15 stocks consolidated news + sentiment
+- `tradease dashboard` — Web dashboard (trades, P&L, sentiment)
 - `tradease portfolio` — View portfolio + P&L
 - `tradease trades` — Active trades with live P&L
 - `tradease exit <SYMBOL>` — Manual exit position

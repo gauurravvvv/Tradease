@@ -49,6 +49,12 @@ tradease research RELIANCE
 # Deep research with options + 90-day history
 tradease research deep RELIANCE
 
+# News digest — top stocks + sentiment
+tradease news
+
+# Launch web dashboard
+tradease dashboard
+
 # Check market pulse
 tradease pulse
 
@@ -90,6 +96,18 @@ tradease research RELIANCE --deep
 
 Deep mode fetches FII/DII flows, global cues, sector data, and passes everything to Claude for comprehensive analysis.
 
+### `tradease news`
+
+Consolidated news digest with sentiment analysis for top screened stocks.
+
+```bash
+tradease news              # Top 15 stocks (default)
+tradease news -n 10        # Top 10 stocks
+tradease news --detail     # Show all headlines per stock
+```
+
+Displays a table with stock, sector, news count, sentiment score, and sentiment label (BULLISH/BEARISH/NEUTRAL). Key headlines shown for high-impact sentiment movers.
+
 ### `tradease portfolio`
 
 Show portfolio overview — total capital, available capital, unrealized P&L, open positions.
@@ -120,6 +138,23 @@ tradease exit RELIANCE --reason "Sector rotation out"
 ### `tradease pulse`
 
 Quick market pulse — Nifty/BankNifty levels, change %, and open positions summary.
+
+### `tradease dashboard`
+
+Launch a local web dashboard at `http://localhost:3777`. Dark-themed, auto-refreshes every 60 seconds.
+
+```bash
+tradease dashboard            # Default port 3777
+tradease dashboard -p 8080    # Custom port
+```
+
+Shows:
+- Portfolio summary cards (capital, available, unrealized P&L, positions)
+- Market pulse (Nifty, BankNifty, market status)
+- Open trades table with live P&L + visual bars
+- Performance stats (30d win rate, avg win/loss, best/worst)
+- News sentiment cards for open positions with headlines
+- Recent trade history with results
 
 ### `tradease daemon`
 
@@ -188,9 +223,14 @@ Tradease/
 │   │   └── technicals.js      # Technical indicators (RSI, MACD, etc.)
 │   ├── cli/
 │   │   ├── display.js         # Terminal UI (tables, charts, briefs)
+│   │   ├── news.js            # News digest command
 │   │   ├── portfolio.js       # Portfolio/trades/history display
 │   │   ├── research.js        # Research command handler
 │   │   └── scan.js            # Scan command + trade execution
+│   ├── dashboard/
+│   │   ├── server.js          # Express API server
+│   │   └── public/
+│   │       └── index.html     # Web dashboard (dark theme)
 │   ├── config/
 │   │   └── settings.js        # All configuration
 │   ├── data/

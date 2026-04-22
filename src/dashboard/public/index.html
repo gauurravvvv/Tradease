@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tradease Dashboard</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg: #0a0a0f;
+      --card: #12121a;
+      --card-border: #1e1e2e;
+      --text: #e0e0e0;
+      --text-dim: #6b7280;
+      --green: #22c55e;
+      --red: #ef4444;
+      --yellow: #eab308;
+      --cyan: #06b6d4;
+      --purple: #a855f7;
+      --accent: #3b82f6;
+    }
+
+    body {
+      font-family: 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    /* ── Header ─────────────────────────────────── */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 24px;
+      background: linear-gradient(135deg, #12121a 0%, #1a1a2e 100%);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      margin-bottom: 20px;
+    }
+    .header h1 {
+      font-size: 1.4rem;
+      font-weight: 700;
+      background: linear-gradient(90deg, var(--cyan), var(--accent));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .header .meta {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      font-size: 0.75rem;
+      color: var(--text-dim);
+    }
+    .status-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    /* ── Grid ───────────────────────────────────── */
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      padding: 16px 20px;
+    }
+    .card-title {
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: var(--text-dim);
+      margin-bottom: 8px;
+    }
+    .card-value {
+      font-size: 1.5rem;
+      font-weight: 700;
+    }
+    .card-sub {
+      font-size: 0.7rem;
+      color: var(--text-dim);
+      margin-top: 4px;
+    }
+
+    /* ── Market Pulse ───────────────────────────── */
+    .pulse-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+    .pulse-card {
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      padding: 14px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .pulse-label { font-size: 0.75rem; color: var(--text-dim); }
+    .pulse-price { font-size: 1.1rem; font-weight: 600; }
+    .pulse-change { font-size: 0.85rem; font-weight: 600; }
+
+    /* ── Sections ───────────────────────────────── */
+    .section {
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    .section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+    .section-title {
+      font-size: 0.85rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--cyan);
+    }
+    .badge {
+      font-size: 0.65rem;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-weight: 600;
+    }
+    .badge-green { background: rgba(34,197,94,0.15); color: var(--green); }
+    .badge-red { background: rgba(239,68,68,0.15); color: var(--red); }
+    .badge-yellow { background: rgba(234,179,8,0.15); color: var(--yellow); }
+    .badge-gray { background: rgba(107,114,128,0.15); color: var(--text-dim); }
+
+    /* ── Tables ─────────────────────────────────── */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    th {
+      text-align: left;
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-dim);
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--card-border);
+    }
+    td {
+      padding: 10px 12px;
+      font-size: 0.8rem;
+      border-bottom: 1px solid rgba(30,30,46,0.5);
+    }
+    tr:hover td { background: rgba(59,130,246,0.04); }
+
+    .text-green { color: var(--green); }
+    .text-red { color: var(--red); }
+    .text-yellow { color: var(--yellow); }
+    .text-dim { color: var(--text-dim); }
+    .text-cyan { color: var(--cyan); }
+    .text-bold { font-weight: 600; }
+
+    /* ── PnL bar ────────────────────────────────── */
+    .pnl-bar {
+      display: inline-block;
+      height: 6px;
+      border-radius: 3px;
+      min-width: 4px;
+      max-width: 80px;
+      vertical-align: middle;
+      margin-left: 6px;
+    }
+
+    /* ── Sentiment ──────────────────────────────── */
+    .sentiment-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 12px;
+    }
+    .sentiment-card {
+      background: rgba(10,10,15,0.5);
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      padding: 14px;
+    }
+    .sentiment-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    .sentiment-card-symbol { font-weight: 700; font-size: 0.9rem; }
+    .headline {
+      font-size: 0.7rem;
+      color: var(--text-dim);
+      padding: 3px 0;
+      border-bottom: 1px solid rgba(30,30,46,0.3);
+    }
+    .headline:last-child { border-bottom: none; }
+    .headline-icon { margin-right: 6px; }
+
+    /* ── Two column ─────────────────────────────── */
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+
+    /* ── Empty state ────────────────────────────── */
+    .empty {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--text-dim);
+      font-size: 0.8rem;
+    }
+
+    /* ── Responsive ─────────────────────────────── */
+    @media (max-width: 900px) {
+      .grid { grid-template-columns: repeat(2, 1fr); }
+      .pulse-row { grid-template-columns: 1fr; }
+      .two-col { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 600px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <div class="header">
+    <h1>TRADEASE</h1>
+    <div class="meta">
+      <span id="last-updated">Loading...</span>
+      <span>Auto-refresh: 60s</span>
+      <div class="status-dot"></div>
+    </div>
+  </div>
+
+  <!-- Portfolio Cards -->
+  <div class="grid" id="portfolio-grid">
+    <div class="card">
+      <div class="card-title">Total Capital</div>
+      <div class="card-value" id="total-capital">--</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Available</div>
+      <div class="card-value" id="available-capital">--</div>
+      <div class="card-sub" id="capital-pct">--</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Unrealized P&L</div>
+      <div class="card-value" id="unrealized-pnl">--</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Open Positions</div>
+      <div class="card-value" id="open-positions">--</div>
+      <div class="card-sub" id="max-positions">/ 3 max</div>
+    </div>
+  </div>
+
+  <!-- Market Pulse -->
+  <div class="pulse-row" id="pulse-row">
+    <div class="pulse-card">
+      <div>
+        <div class="pulse-label">NIFTY 50</div>
+        <div class="pulse-price" id="nifty-price">--</div>
+      </div>
+      <div class="pulse-change" id="nifty-change">--</div>
+    </div>
+    <div class="pulse-card">
+      <div>
+        <div class="pulse-label">BANK NIFTY</div>
+        <div class="pulse-price" id="banknifty-price">--</div>
+      </div>
+      <div class="pulse-change" id="banknifty-change">--</div>
+    </div>
+    <div class="pulse-card">
+      <div>
+        <div class="pulse-label">MARKET STATUS</div>
+        <div class="pulse-price" id="market-status">--</div>
+      </div>
+      <div id="market-severity"></div>
+    </div>
+  </div>
+
+  <!-- Open Trades -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-title">Open Trades</span>
+      <span class="badge badge-green" id="trade-count">0 active</span>
+    </div>
+    <div id="trades-container">
+      <div class="empty">No open trades</div>
+    </div>
+  </div>
+
+  <!-- Two-column: Stats + Sentiment -->
+  <div class="two-col">
+    <!-- Performance Stats -->
+    <div class="section">
+      <div class="section-header">
+        <span class="section-title">Performance (30d)</span>
+      </div>
+      <div id="stats-container">
+        <div class="empty">Loading...</div>
+      </div>
+    </div>
+
+    <!-- News Sentiment -->
+    <div class="section">
+      <div class="section-header">
+        <span class="section-title">News Sentiment</span>
+        <span class="badge badge-gray" id="news-badge">positions</span>
+      </div>
+      <div id="news-container">
+        <div class="empty">No open positions to monitor</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Recent History -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-title">Recent Trades</span>
+      <span class="badge badge-gray" id="history-badge">last 30d</span>
+    </div>
+    <div id="history-container">
+      <div class="empty">No trade history</div>
+    </div>
+  </div>
+
+<script>
+  const INR = (n) => {
+    if (n == null || isNaN(n)) return '₹0';
+    const neg = n < 0;
+    const s = Math.abs(n).toLocaleString('en-IN', { maximumFractionDigits: 0 });
+    return `${neg ? '-' : ''}₹${s}`;
+  };
+
+  const pct = (n) => {
+    if (n == null || isNaN(n)) return '0.0%';
+    return `${n >= 0 ? '+' : ''}${n.toFixed(1)}%`;
+  };
+
+  const pnlClass = (n) => n >= 0 ? 'text-green' : 'text-red';
+
+  function renderTrades(trades) {
+    const el = document.getElementById('trades-container');
+    document.getElementById('trade-count').textContent = `${trades.length} active`;
+
+    if (!trades.length) {
+      el.innerHTML = '<div class="empty">No open trades</div>';
+      return;
+    }
+
+    const rows = trades.map(t => {
+      const pnl = t.live_pnl || 0;
+      const pnlP = t.live_pnl_pct || 0;
+      const barWidth = Math.min(Math.abs(pnlP) * 2, 80);
+      const barColor = pnl >= 0 ? 'var(--green)' : 'var(--red)';
+      const typeClass = t.type === 'CALL' ? 'text-green' : 'text-red';
+      const t1Status = t.t1_hit ? '✓' : '·';
+      const t2Status = t.t2_hit ? '✓' : '·';
+
+      return `<tr>
+        <td class="text-bold">${t.symbol}</td>
+        <td class="${typeClass} text-bold">${t.type}</td>
+        <td>${INR(t.entry_price)}</td>
+        <td>${INR(t.current_price || t.entry_price)}</td>
+        <td class="text-red">${INR(t.stop_loss)}</td>
+        <td>T1:${t1Status} T2:${t2Status}</td>
+        <td class="${pnlClass(pnl)}">
+          ${INR(pnl)} (${pct(pnlP)})
+          <span class="pnl-bar" style="width:${barWidth}px;background:${barColor}"></span>
+        </td>
+        <td class="text-dim">${t.quantity || 1} lots</td>
+        <td>${INR(t.capital_used)}</td>
+      </tr>`;
+    }).join('');
+
+    el.innerHTML = `<table>
+      <thead><tr>
+        <th>Symbol</th><th>Type</th><th>Entry</th><th>Current</th>
+        <th>SL</th><th>Targets</th><th>P&L</th><th>Qty</th><th>Capital</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+  }
+
+  function renderPulse(pulse) {
+    if (!pulse) return;
+
+    const nifty = pulse.nifty || {};
+    const bank = pulse.bankNifty || {};
+
+    document.getElementById('nifty-price').textContent =
+      nifty.price ? nifty.price.toLocaleString('en-IN') : '--';
+    const nChg = document.getElementById('nifty-change');
+    nChg.textContent = pct(nifty.changePct);
+    nChg.className = `pulse-change ${pnlClass(nifty.changePct || 0)}`;
+
+    document.getElementById('banknifty-price').textContent =
+      bank.price ? bank.price.toLocaleString('en-IN') : '--';
+    const bChg = document.getElementById('banknifty-change');
+    bChg.textContent = pct(bank.changePct);
+    bChg.className = `pulse-change ${pnlClass(bank.changePct || 0)}`;
+
+    const sev = pulse.severity || 'normal';
+    const sevEl = document.getElementById('market-severity');
+    const statusEl = document.getElementById('market-status');
+    statusEl.textContent = sev.toUpperCase();
+    if (sev === 'critical') {
+      sevEl.innerHTML = '<span class="badge badge-red">CRITICAL</span>';
+      statusEl.className = 'pulse-price text-red';
+    } else if (sev === 'warning') {
+      sevEl.innerHTML = '<span class="badge badge-yellow">WARNING</span>';
+      statusEl.className = 'pulse-price text-yellow';
+    } else {
+      sevEl.innerHTML = '<span class="badge badge-green">NORMAL</span>';
+      statusEl.className = 'pulse-price text-green';
+    }
+  }
+
+  function renderPortfolio(p) {
+    if (!p) return;
+    document.getElementById('total-capital').textContent = INR(p.totalCapital);
+    document.getElementById('available-capital').textContent = INR(p.availableCapital);
+    document.getElementById('capital-pct').textContent =
+      p.totalCapital ? `${((p.availableCapital / p.totalCapital) * 100).toFixed(0)}% free` : '';
+    const pnlEl = document.getElementById('unrealized-pnl');
+    pnlEl.textContent = INR(p.unrealizedPnl);
+    pnlEl.className = `card-value ${pnlClass(p.unrealizedPnl || 0)}`;
+    document.getElementById('open-positions').textContent = p.openPositions || 0;
+  }
+
+  function renderStats(stats) {
+    const el = document.getElementById('stats-container');
+    if (!stats) { el.innerHTML = '<div class="empty">No data</div>'; return; }
+
+    const wr = stats.winRate || 0;
+    const wrColor = wr >= 60 ? 'text-green' : wr >= 40 ? 'text-yellow' : 'text-red';
+
+    el.innerHTML = `<table>
+      <tr><td class="text-dim">Total Trades</td><td class="text-bold">${stats.totalTrades || 0}</td></tr>
+      <tr><td class="text-dim">Wins / Losses</td><td><span class="text-green">${stats.wins || 0}W</span> / <span class="text-red">${stats.losses || 0}L</span></td></tr>
+      <tr><td class="text-dim">Win Rate</td><td class="${wrColor} text-bold">${wr}%</td></tr>
+      <tr><td class="text-dim">Total P&L</td><td class="${pnlClass(stats.totalPnl || 0)} text-bold">${INR(stats.totalPnl)}</td></tr>
+      <tr><td class="text-dim">Avg Win</td><td class="text-green">${INR(stats.avgWin)}</td></tr>
+      <tr><td class="text-dim">Avg Loss</td><td class="text-red">${INR(stats.avgLoss)}</td></tr>
+      <tr><td class="text-dim">Best Trade</td><td class="text-green">${INR(stats.bestTrade)}</td></tr>
+      <tr><td class="text-dim">Worst Trade</td><td class="text-red">${INR(stats.worstTrade)}</td></tr>
+    </table>`;
+  }
+
+  function renderHistory(history) {
+    const el = document.getElementById('history-container');
+    document.getElementById('history-badge').textContent = `${history.length} trades`;
+
+    if (!history.length) {
+      el.innerHTML = '<div class="empty">No trade history</div>';
+      return;
+    }
+
+    const rows = history.map(t => {
+      const pnl = t.pnl || 0;
+      const status = t.status === 'STOPPED' ? 'badge-red' : pnl >= 0 ? 'badge-green' : 'badge-red';
+      const statusLabel = t.status === 'STOPPED' ? 'STOPPED' : pnl >= 0 ? 'WIN' : 'LOSS';
+      const date = t.exited_at ? new Date(t.exited_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) : '--';
+
+      return `<tr>
+        <td class="text-dim">${date}</td>
+        <td class="text-bold">${t.symbol}</td>
+        <td class="${t.type === 'CALL' ? 'text-green' : 'text-red'}">${t.type}</td>
+        <td>${INR(t.entry_price)}</td>
+        <td>${INR(t.exit_price)}</td>
+        <td class="${pnlClass(pnl)} text-bold">${INR(pnl)}</td>
+        <td><span class="badge ${status}">${statusLabel}</span></td>
+        <td class="text-dim" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.exit_reason || '--'}</td>
+      </tr>`;
+    }).join('');
+
+    el.innerHTML = `<table>
+      <thead><tr>
+        <th>Date</th><th>Symbol</th><th>Type</th><th>Entry</th><th>Exit</th><th>P&L</th><th>Result</th><th>Reason</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+  }
+
+  function renderNews(newsData) {
+    const el = document.getElementById('news-container');
+    document.getElementById('news-badge').textContent = `${newsData.length} positions`;
+
+    if (!newsData.length) {
+      el.innerHTML = '<div class="empty">No open positions to monitor</div>';
+      return;
+    }
+
+    const cards = newsData.map(n => {
+      const sentClass = n.sentiment.includes('positive') ? 'text-green'
+        : n.sentiment.includes('negative') ? 'text-red'
+        : 'text-dim';
+      const sentLabel = n.sentiment.replace('very_', '').replace('_', ' ').toUpperCase();
+      const scoreSign = n.totalScore > 0 ? '+' : '';
+
+      const headlines = n.headlines.map(h => {
+        const icon = h.score > 0 ? '<span class="headline-icon text-green">+</span>'
+          : h.score < 0 ? '<span class="headline-icon text-red">-</span>'
+          : '<span class="headline-icon text-dim">·</span>';
+        const title = h.title.length > 60 ? h.title.slice(0, 57) + '...' : h.title;
+        const link = h.link ? `<a href="${h.link}" target="_blank" style="color:inherit;text-decoration:none">${title}</a>` : title;
+        return `<div class="headline">${icon}${link}</div>`;
+      }).join('');
+
+      return `<div class="sentiment-card">
+        <div class="sentiment-card-header">
+          <span class="sentiment-card-symbol">${n.symbol}</span>
+          <span class="${sentClass} text-bold">${sentLabel} (${scoreSign}${n.totalScore})</span>
+        </div>
+        ${headlines || '<div class="text-dim" style="font-size:0.7rem">No news found</div>'}
+        <div class="text-dim" style="font-size:0.65rem;margin-top:6px">${n.newsCount} article(s)</div>
+      </div>`;
+    }).join('');
+
+    el.innerHTML = `<div class="sentiment-grid">${cards}</div>`;
+  }
+
+  // ── Fetch & render ──────────────────────────────────────
+  async function refresh() {
+    try {
+      const [dashRes, newsRes] = await Promise.all([
+        fetch('/api/dashboard').then(r => r.json()),
+        fetch('/api/news').then(r => r.json()).catch(() => []),
+      ]);
+
+      renderPortfolio(dashRes.portfolio);
+      renderTrades(dashRes.trades || []);
+      renderPulse(dashRes.pulse);
+      renderStats(dashRes.stats);
+      renderHistory(dashRes.history || []);
+      renderNews(newsRes);
+
+      const now = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      document.getElementById('last-updated').textContent = `Updated: ${now}`;
+    } catch (err) {
+      console.error('Refresh failed:', err);
+      document.getElementById('last-updated').textContent = `Error: ${err.message}`;
+    }
+  }
+
+  // Initial load + auto-refresh
+  refresh();
+  setInterval(refresh, 60000);
+</script>
+
+</body>
+</html>

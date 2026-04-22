@@ -25,7 +25,7 @@ const POSITIVE_KEYWORDS = [
  * Score a news item's sentiment based on keyword matching.
  * Returns number: negative = bearish, positive = bullish.
  */
-function scoreSentiment(newsItem) {
+export function scoreSentiment(newsItem) {
   const text = `${newsItem.title} ${newsItem.snippet}`;
   let score = 0;
 
@@ -42,7 +42,7 @@ function scoreSentiment(newsItem) {
 /**
  * Classify overall sentiment from score.
  */
-function classifySentiment(score) {
+export function classifySentiment(score) {
   if (score <= -3) return 'very_negative';
   if (score <= -1) return 'negative';
   if (score >= 3) return 'very_positive';

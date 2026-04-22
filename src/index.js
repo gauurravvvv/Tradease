@@ -4,8 +4,10 @@ import { Command } from 'commander';
 import chalk from 'chalk';
 import { runScan, autoExecuteTrades } from './cli/scan.js';
 import { runResearch } from './cli/research.js';
+import { runNewsDigest } from './cli/news.js';
 import { showPortfolio, showTrades, showHistory } from './cli/portfolio.js';
 import { displayHeader, displayMarketPulse, formatCurrency } from './cli/display.js';
+import { startDashboard } from './dashboard/server.js';
 import { createScheduler } from './scheduler/cron.js';
 import { ListenerManager } from './listeners/manager.js';
 import { checkIndexHealth } from './listeners/index-monitor.js';
@@ -65,6 +67,24 @@ program
       await runResearch(sym.toUpperCase(), mode);
     } catch (err) {
       console.error(chalk.red(`Research failed: ${err.message}`));
+      process.exit(1);
+    }
+  });
+
+// ─── news ────────────────────────────────────────────────────────────────────
+program
+  .command('news')
+  .description('Top 15 stocks — consolidated news + sentiment')
+  .option('-n, --top <number>', 'Number of stocks', '15')
+  .option('-d, --detail', 'Show all headlines')
+  .action(async (opts) => {
+    try {
+      await runNewsDigest({
+        topN: parseInt(opts.top, 10),
+        detail: opts.detail || false,
+      });
+    } catch (err) {
+      console.error(chalk.red(`News failed: ${err.message}`));
       process.exit(1);
     }
   });
@@ -172,6 +192,25 @@ program
       }
     } catch (err) {
       console.error(chalk.red(`Pulse failed: ${err.message}`));
+      process.exit(1);
+    }
+  });
+
+// ─── dashboard ──────────────────────────────────────────────────────────────
+program
+  .command('dashboard')
+  .description('Launch web dashboard — trades, P&L, sentiment')
+  .option('-p, --port <number>', 'Port number', '3777')
+  .action(async (opts) => {
+    try {
+      getDb();
+      const port = parseInt(opts.port, 10);
+      displayHeader('Tradease Dashboard', `http://localhost:${port}`);
+      startDashboard(port);
+      console.log(chalk.green.bold(`\n  Dashboard running at http://localhost:${port}`));
+      console.log(chalk.gray('  Press Ctrl+C to stop.\n'));
+    } catch (err) {
+      console.error(chalk.red(`Dashboard failed: ${err.message}`));
       process.exit(1);
     }
   });
