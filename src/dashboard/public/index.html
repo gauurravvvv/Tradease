@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Tradease Dashboard</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
   <style>
     *{margin:0;padding:0;box-sizing:border-box}
     :root{--bg:#0a0a0f;--card:#12121a;--card-border:#1e1e2e;--text:#e0e0e0;--text-dim:#6b7280;--green:#22c55e;--red:#ef4444;--yellow:#eab308;--cyan:#06b6d4;--purple:#a855f7;--accent:#3b82f6;--orange:#f97316}
@@ -244,6 +245,21 @@
     [data-tip]{position:relative;cursor:help}
     [data-tip]:hover::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);background:#1a1a2e;border:1px solid var(--card-border);color:var(--text);padding:4px 8px;border-radius:4px;font-size:0.6rem;white-space:nowrap;z-index:100;pointer-events:none}
 
+    /* Collapsible sections */
+    .section-header{cursor:pointer;user-select:none}
+    .section-header .chevron{transition:transform 0.2s;display:inline-block;margin-right:6px;font-size:0.6rem}
+    .section-header .chevron.collapsed{transform:rotate(-90deg)}
+    .section-content.collapsed{display:none}
+
+    /* Win rate bar */
+    .winrate-bar-track{width:100%;height:8px;background:rgba(239,68,68,0.25);border-radius:4px;overflow:hidden;margin-top:4px}
+    .winrate-bar-fill{height:100%;border-radius:4px;transition:width 0.5s}
+
+    /* Shortcuts modal */
+    .shortcut-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--card-border);font-size:0.75rem}
+    .shortcut-row:last-child{border-bottom:none}
+    .shortcut-key{display:inline-block;min-width:32px;text-align:center;padding:3px 8px;background:rgba(255,255,255,0.06);border:1px solid var(--card-border);border-radius:4px;font-weight:700;font-size:0.7rem;color:var(--cyan)}
+
     /* Responsive */
     @media(max-width:1100px){.cards-6{grid-template-columns:repeat(3,1fr)}.rec-grid{grid-template-columns:repeat(auto-fill,minmax(250px,1fr))}}
     @media(max-width:900px){.grid-2{grid-template-columns:1fr}.cards-6{grid-template-columns:repeat(2,1fr)}}
@@ -297,8 +313,15 @@
 
 <!-- Header -->
 <div class="header">
-  <h1>TRADEASE</h1>
+  <div style="display:flex;align-items:center;gap:16px">
+    <h1>⚡ TRADEASE</h1>
+    <div style="display:flex;align-items:baseline;gap:8px">
+      <span style="font-size:1.1rem;font-weight:700" id="today-pnl">₹0</span>
+      <span style="font-size:0.6rem" id="today-pnl-pct">0%</span>
+    </div>
+  </div>
   <div class="meta">
+    <span class="badge badge-cyan" id="position-count-badge" style="font-weight:700">0/3</span>
     <span class="badge badge-gray" id="session-badge">--</span>
     <span class="badge badge-live" id="sse-badge">LIVE</span>
     <span id="last-updated">Loading...</span>
@@ -314,6 +337,7 @@
   <div style="flex:1"></div>
   <span class="text-dim" style="font-size:0.6rem" id="scan-age"></span>
   <button class="btn btn-sm" onclick="refreshAll()">Refresh</button>
+  <button class="btn btn-sm" onclick="openModal('modal-shortcuts')" title="Keyboard Shortcuts" style="font-size:0.8rem;padding:4px 10px">?</button>
 </div>
 
 <!-- Top Cards -->
@@ -328,27 +352,30 @@
 
 <!-- Recommended Trades -->
 <div class="section" style="border-color:rgba(6,182,212,0.2)">
-  <div class="section-header">
-    <span class="section-title" style="font-size:0.9rem">Recommended Trades</span>
+  <div class="section-header" onclick="toggleSection(this)">
+    <span class="section-title" style="font-size:0.9rem"><span class="chevron">▼</span>Recommended Trades</span>
     <div class="section-actions">
       <span class="badge badge-cyan" id="recs-badge">--</span>
-      <button class="btn btn-sm btn-primary" onclick="runScan()">Scan Now</button>
+      <button class="btn btn-sm btn-primary" onclick="runScan();event.stopPropagation()">Scan Now</button>
       <div class="section-spinner" id="spin-recs"></div>
     </div>
   </div>
+  <div class="section-content">
   <div id="recs-container"><div class="empty">Run a scan to get trade recommendations<div class="empty-cta"><button class="btn btn-primary" onclick="runScan()">Run Scan</button></div></div></div>
+  </div>
 </div>
 
 <!-- Agent Activity -->
 <div class="section">
-  <div class="section-header">
-    <span class="section-title" style="font-size:0.9rem">Autonomous Agents</span>
+  <div class="section-header" onclick="toggleSection(this)">
+    <span class="section-title" style="font-size:0.9rem"><span class="chevron">▼</span>Autonomous Agents</span>
     <div class="section-actions">
       <span class="badge badge-purple" id="agent-status-badge">offline</span>
       <span class="badge badge-gray" id="agent-token-badge">0 tokens today</span>
       <div class="section-spinner" id="spin-agents"></div>
     </div>
   </div>
+  <div class="section-content">
   <div id="agent-container">
     <div class="agent-control-bar">
       <button class="agent-power-btn" id="btn-agent-power" onclick="toggleAgents()">Start Agents</button>
@@ -358,16 +385,18 @@
     <div style="font-size:0.7rem;font-weight:600;margin-bottom:6px;color:var(--text-dim)">Activity Log</div>
     <div class="agent-log-list" id="agent-logs"><div class="text-dim" style="font-size:0.65rem;padding:8px 0">No agent activity yet</div></div>
   </div>
+  </div>
 </div>
 
 <!-- Risk Dashboard -->
 <div class="section" id="risk-section">
-  <div class="section-header">
-    <span class="section-title">Risk Dashboard</span>
+  <div class="section-header" onclick="toggleSection(this)">
+    <span class="section-title"><span class="chevron">▼</span>Risk Dashboard</span>
     <div class="section-actions">
       <span class="badge badge-gray" id="risk-heat-badge">No positions</span>
     </div>
   </div>
+  <div class="section-content">
   <div class="risk-grid" id="risk-grid">
     <div class="risk-donut-wrap">
       <canvas id="risk-donut" width="180" height="180"></canvas>
@@ -390,88 +419,104 @@
     <div class="risk-metric"><div class="risk-metric-label">Avg R:R</div><div class="risk-metric-value text-cyan" id="rm-rr">0.0</div></div>
     <div class="risk-metric"><div class="risk-metric-label">Streak</div><div class="risk-metric-value" id="rm-streak">--</div></div>
   </div>
+  </div>
 </div>
 
 <!-- Open Trades (live-updating) -->
 <div class="section">
-  <div class="section-header">
-    <span class="section-title">Open Trades</span>
+  <div class="section-header" onclick="toggleSection(this)">
+    <span class="section-title"><span class="chevron">▼</span>Open Trades</span>
     <div class="section-actions">
       <span class="badge badge-green" id="trade-count">0 active</span>
       <span class="badge badge-live" style="font-size:0.5rem">LIVE</span>
-      <button class="btn btn-green btn-sm" onclick="openTradeWizard()">+ New</button>
+      <button class="btn btn-green btn-sm" onclick="openTradeWizard();event.stopPropagation()">+ New</button>
       <div class="section-spinner" id="spin-trades"></div>
     </div>
   </div>
+  <div class="section-content">
   <div id="trades-container"><div class="empty">No open trades<div class="empty-cta"><button class="btn btn-green btn-sm" onclick="openTradeWizard()">Enter Trade</button></div></div></div>
+  </div>
 </div>
 
 <!-- Live Finance News + Market Status Row -->
 <div class="grid-2">
   <div class="section">
-    <div class="section-header">
-      <span class="section-title">Live Market News</span>
+    <div class="section-header" onclick="toggleSection(this)">
+      <span class="section-title"><span class="chevron">▼</span>Live Market News</span>
       <div class="section-actions">
         <span class="badge badge-live" style="font-size:0.5rem">LIVE</span>
         <span class="badge badge-gray" id="live-news-count">--</span>
         <div class="section-spinner" id="spin-live-news"></div>
       </div>
     </div>
+    <div class="section-content">
     <div class="news-feed" id="live-news-container"><div class="loading" style="height:200px"></div></div>
+    </div>
   </div>
   <div class="section">
-    <div class="section-header">
-      <span class="section-title">Global Markets</span>
+    <div class="section-header" onclick="toggleSection(this)">
+      <span class="section-title"><span class="chevron">▼</span>Global Markets</span>
       <div class="section-actions"><span class="badge badge-gray" id="mood-badge">--</span><div class="section-spinner" id="spin-market"></div></div>
     </div>
+    <div class="section-content">
     <div id="global-container"><div class="loading" style="height:200px"></div></div>
     <div style="margin-top:8px"><div style="font-size:0.55rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px">Global Mood</div><div class="mood-bar"><div class="mood-indicator" id="mood-dot" style="left:50%"></div></div></div>
+    </div>
   </div>
 </div>
 
 <!-- FII/DII + Sectors -->
 <div class="grid-2">
   <div class="section">
-    <div class="section-header"><span class="section-title">FII/DII Flows</span><div class="section-spinner" id="spin-fii"></div></div>
+    <div class="section-header" onclick="toggleSection(this)"><span class="section-title"><span class="chevron">▼</span>FII/DII Flows</span><div class="section-spinner" id="spin-fii"></div></div>
+    <div class="section-content">
     <div id="fii-container"></div>
+    </div>
   </div>
   <div class="section">
-    <div class="section-header"><span class="section-title">Sector Rotation</span></div>
+    <div class="section-header" onclick="toggleSection(this)"><span class="section-title"><span class="chevron">▼</span>Sector Rotation</span></div>
+    <div class="section-content">
     <div id="sector-container"><div class="loading" style="height:150px"></div></div>
+    </div>
   </div>
 </div>
 
 <!-- All Picks Table -->
 <div class="section">
-  <div class="section-header">
-    <span class="section-title">All Screener Picks</span>
+  <div class="section-header" onclick="toggleSection(this)">
+    <span class="section-title"><span class="chevron">▼</span>All Screener Picks</span>
     <div class="section-actions"><span class="badge badge-cyan" id="picks-badge">--</span><div class="section-spinner" id="spin-picks"></div></div>
   </div>
+  <div class="section-content">
   <div id="picks-container"><div class="loading" style="height:200px"></div></div>
+  </div>
 </div>
 
 <!-- Stock-Specific News & Sentiment -->
 <div class="section">
-  <div class="section-header">
-    <span class="section-title">Stock News & Sentiment</span>
+  <div class="section-header" onclick="toggleSection(this)">
+    <span class="section-title"><span class="chevron">▼</span>Stock News & Sentiment</span>
     <div class="section-actions"><span class="badge badge-gray" id="news-badge">--</span><div class="section-spinner" id="spin-news"></div></div>
   </div>
+  <div class="section-content">
   <div id="news-container"><div class="loading" style="height:150px"></div></div>
+  </div>
 </div>
 
 <!-- Performance Analytics -->
 <div class="section" id="perf-section">
-  <div class="section-header">
-    <span class="section-title">Performance Analytics</span>
+  <div class="section-header" onclick="toggleSection(this)">
+    <span class="section-title"><span class="chevron">▼</span>Performance Analytics</span>
     <div class="section-actions">
       <div class="perf-toggle-bar">
-        <button class="perf-toggle active" onclick="loadEquityCurve(7)" data-days="7">7d</button>
-        <button class="perf-toggle" onclick="loadEquityCurve(30)" data-days="30">30d</button>
-        <button class="perf-toggle" onclick="loadEquityCurve(90)" data-days="90">90d</button>
-        <button class="perf-toggle" onclick="loadEquityCurve(365)" data-days="365">All</button>
+        <button class="perf-toggle active" onclick="loadEquityCurve(7);event.stopPropagation()" data-days="7">7d</button>
+        <button class="perf-toggle" onclick="loadEquityCurve(30);event.stopPropagation()" data-days="30">30d</button>
+        <button class="perf-toggle" onclick="loadEquityCurve(90);event.stopPropagation()" data-days="90">90d</button>
+        <button class="perf-toggle" onclick="loadEquityCurve(365);event.stopPropagation()" data-days="365">All</button>
       </div>
     </div>
   </div>
+  <div class="section-content">
   <div id="perf-stats-row" style="display:flex;gap:16px;margin-bottom:10px;font-size:0.65rem;color:var(--text-dim);flex-wrap:wrap">
     <span>Return: <b id="perf-return" class="text-green">0%</b></span>
     <span>Peak: <b id="perf-peak">₹2,00,000</b></span>
@@ -490,23 +535,41 @@
     </div>
   </div>
   <div id="perf-empty" style="display:none;text-align:center;padding:40px;color:var(--text-dim);font-size:0.7rem">Not enough data — charts populate after first trading day</div>
+  </div>
 </div>
 
 <!-- Stats + History -->
 <div class="grid-2">
   <div class="section">
-    <div class="section-header"><span class="section-title">Performance (30d)</span></div>
+    <div class="section-header" onclick="toggleSection(this)"><span class="section-title"><span class="chevron">▼</span>Performance (30d)</span></div>
+    <div class="section-content">
     <div id="stats-container"><div class="empty">Loading...</div></div>
+    </div>
   </div>
   <div class="section">
-    <div class="section-header"><span class="section-title">Recent Trades</span><span class="badge badge-gray" id="history-badge">--</span></div>
+    <div class="section-header" onclick="toggleSection(this)"><span class="section-title"><span class="chevron">▼</span>Recent Trades</span><div class="section-actions"><span class="badge badge-gray" id="history-badge">--</span><button class="btn btn-sm" onclick="exportCSV();event.stopPropagation()">Export CSV</button></div></div>
+    <div class="section-content">
     <div id="history-container"><div class="empty">Loading...</div></div>
+    </div>
   </div>
 </div>
 
 </div><!-- /main -->
 
 <!-- ═══════════ MODALS ═══════════ -->
+
+<!-- Keyboard Shortcuts Modal -->
+<div class="modal-overlay" id="modal-shortcuts">
+  <div class="modal" style="max-width:380px">
+    <div class="modal-title">Keyboard Shortcuts <button class="modal-close" onclick="closeModal('modal-shortcuts')">&times;</button></div>
+    <div class="shortcut-row"><span>Run Scan</span><span class="shortcut-key">S</span></div>
+    <div class="shortcut-row"><span>Research Stock</span><span class="shortcut-key">R</span></div>
+    <div class="shortcut-row"><span>New Trade</span><span class="shortcut-key">T</span></div>
+    <div class="shortcut-row"><span>Show Shortcuts</span><span class="shortcut-key">?</span></div>
+    <div class="shortcut-row"><span>Close Modals</span><span class="shortcut-key">Esc</span></div>
+    <div class="shortcut-row"><span>Refresh Dashboard</span><span class="shortcut-key">F5</span></div>
+  </div>
+</div>
 
 <!-- Research Modal -->
 <div class="modal-overlay" id="modal-research">
@@ -572,6 +635,60 @@ const api=async(url,opts)=>{const r=await fetch(url,opts);const j=await r.json()
 const timeAgo=d=>{if(!d)return'';const m=Math.round((Date.now()-new Date(d).getTime())/60000);if(m<1)return'just now';if(m<60)return m+'m ago';return Math.round(m/60)+'h ago'};
 
 let _tradeSugg=null,_quickTradeData=null,_scanAge=null,_prevPrices={};
+let _prevTradeIds=new Set();
+let _prevTradePnls={};
+
+// ── Sound Alerts (Web Audio API) ──
+const AudioCtx = window.AudioContext || window.webkitAudioContext;
+let _audioCtx;
+function playTone(freq, duration=0.15, type='sine') {
+  if(!_audioCtx) _audioCtx = new AudioCtx();
+  const osc = _audioCtx.createOscillator();
+  const gain = _audioCtx.createGain();
+  osc.connect(gain);
+  gain.connect(_audioCtx.destination);
+  osc.frequency.value = freq;
+  osc.type = type;
+  gain.gain.setValueAtTime(0.3, _audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.01, _audioCtx.currentTime + duration);
+  osc.start();
+  osc.stop(_audioCtx.currentTime + duration);
+}
+function soundEntry() { playTone(523, 0.1); setTimeout(()=>playTone(659, 0.1), 100); setTimeout(()=>playTone(784, 0.15), 200); }
+function soundProfit() { playTone(523, 0.1); setTimeout(()=>playTone(659, 0.1), 80); setTimeout(()=>playTone(784, 0.1), 160); setTimeout(()=>playTone(1047, 0.2), 240); }
+function soundStopLoss() { playTone(523, 0.1); setTimeout(()=>playTone(392, 0.1), 100); setTimeout(()=>playTone(294, 0.2), 200); }
+function soundAlert() { playTone(880, 0.08); setTimeout(()=>playTone(880, 0.08), 150); }
+
+// ── Collapsible Sections ──
+function toggleSection(el) {
+  const content = el.closest('.section').querySelector('.section-content');
+  const chevron = el.querySelector('.chevron');
+  if(content) content.classList.toggle('collapsed');
+  if(chevron) chevron.classList.toggle('collapsed');
+}
+
+// ── CSV Export ──
+function exportCSV() {
+  api('/api/dashboard').then(data => {
+    const trades = data.history || [];
+    if(!trades.length) { toast('No trades to export', 'info'); return; }
+    const headers = ['Date','Symbol','Type','Entry','Exit','P&L','Status','Reason'];
+    const rows = trades.map(t => [
+      t.exited_at ? new Date(t.exited_at).toISOString().slice(0,10) : '',
+      t.symbol, t.type,
+      t.entry_price, t.exit_price || '',
+      t.pnl || 0, t.status,
+      (t.exit_reason || '').replace(/,/g, ';')
+    ]);
+    const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `tradease-trades-${new Date().toISOString().slice(0,10)}.csv`;
+    a.click(); URL.revokeObjectURL(url);
+    toast('Trades exported', 'success');
+  });
+}
 
 // ── Toast ──
 function toast(msg,type='info',dur=3500){const c=document.getElementById('toast-container');const t=document.createElement('div');t.className=`toast toast-${type}`;const ic=type==='success'?'&#10003;':type==='error'?'&#10007;':'&#9432;';t.innerHTML=`<span>${ic}</span> ${msg}`;c.appendChild(t);setTimeout(()=>{t.style.animation='toastOut 0.3s forwards';setTimeout(()=>t.remove(),300)},dur)}
@@ -585,7 +702,28 @@ function connectSSE(){
   sse.onerror=()=>{document.getElementById('live-dot').classList.add('disconnected');document.getElementById('sse-badge').textContent='RECONNECTING'};
 
   sse.addEventListener('trades',e=>{
-    try{const trades=JSON.parse(e.data);renderTradesLive(trades)}catch{}
+    try{
+      const trades=JSON.parse(e.data);
+      // Sound alerts: detect entries/exits
+      const currentIds=new Set(trades.map(t=>t.id));
+      if(_prevTradeIds.size>0){
+        // New trades = entry sound
+        for(const id of currentIds){if(!_prevTradeIds.has(id)){soundEntry();break}}
+        // Removed trades = exit sound (check last known P&L)
+        for(const id of _prevTradeIds){
+          if(!currentIds.has(id)){
+            const lastPnl=_prevTradePnls[id]||0;
+            if(lastPnl>=0)soundProfit();else soundStopLoss();
+            delete _prevTradePnls[id];
+            break;
+          }
+        }
+      }
+      // Track P&L per trade for exit sound decisions
+      trades.forEach(t=>{_prevTradePnls[t.id]=t.live_pnl||0});
+      _prevTradeIds=currentIds;
+      renderTradesLive(trades);
+    }catch{}
   });
   sse.addEventListener('portfolio',e=>{
     try{const p=JSON.parse(e.data);updatePortfolioCards(p)}catch{}
@@ -616,6 +754,15 @@ function updatePortfolioCards(p){
   if(prev!==p.unrealizedPnl)flashEl(pe.parentElement,p.unrealizedPnl-prev);
   pe.dataset.val=p.unrealizedPnl||0;
   document.getElementById('open-positions').textContent=p.openPositions||0;
+  // Today's P&L in header (unrealized + realized if available)
+  const todayPnl=(p.unrealizedPnl||0)+(p.realizedPnl||0);
+  const tpEl=document.getElementById('today-pnl');
+  const tpPctEl=document.getElementById('today-pnl-pct');
+  if(tpEl){tpEl.textContent=INR(todayPnl);tpEl.style.color=todayPnl>=0?'var(--green)':'var(--red)'}
+  if(tpPctEl){const totalCap=p.totalCapital||200000;const pnlPct=((todayPnl/totalCap)*100);tpPctEl.textContent=pct(pnlPct);tpPctEl.style.color=todayPnl>=0?'var(--green)':'var(--red)'}
+  // Position count badge
+  const pcBadge=document.getElementById('position-count-badge');
+  if(pcBadge){pcBadge.textContent=`${p.openPositions||0}/3`;pcBadge.className='badge '+((p.openPositions||0)>=3?'badge-red':(p.openPositions||0)>0?'badge-green':'badge-gray')}
 }
 
 function updateIndexCards(idx){
@@ -737,7 +884,7 @@ function renderPicks(picks){const el=document.getElementById('picks-container');
 
 function renderNews(news){const el=document.getElementById('news-container');document.getElementById('news-badge').textContent=`${news.length} stocks`;if(!news.length){el.innerHTML='<div class="empty">No news data</div>';return}const sorted=[...news].sort((a,b)=>Math.abs(b.totalScore)-Math.abs(a.totalScore));const maxAbsScore=Math.max(...sorted.map(n=>Math.abs(n.totalScore)),1);el.innerHTML='<div class="sentiment-grid">'+sorted.map(n=>{const sc=n.sentiment.includes('positive')?'text-green':n.sentiment.includes('negative')?'text-red':'text-dim';const sl=n.sentiment.replace('very_','').replace('_',' ').toUpperCase();const ss=n.totalScore>0?'+':'';const barW=Math.min(100,Math.max(5,(Math.abs(n.totalScore)/maxAbsScore)*100));const barColor=n.totalScore>0?'var(--green)':n.totalScore<0?'var(--red)':'var(--text-dim)';const hl=n.headlines.slice(0,5).map(h=>{const ic=h.score>0?'<span class="headline-icon text-green">&#9650;</span>':h.score<0?'<span class="headline-icon text-red">&#9660;</span>':'<span class="headline-icon text-dim">&middot;</span>';const t=h.title.length>80?h.title.slice(0,77)+'...':h.title;return`<div class="headline">${ic}<span>${h.link?`<a href="${h.link}" target="_blank">${t}</a>`:t}</span></div>`}).join('');return`<div class="sentiment-card"><div class="sentiment-card-header"><span class="sentiment-card-symbol" onclick="openResearchFor('${n.symbol}')">${n.symbol}</span><div class="sentiment-card-badge"><div class="sentiment-score-bar"><div class="sentiment-score-fill" style="width:${barW}%;background:${barColor}"></div></div><span class="${sc} text-bold" style="font-size:0.75rem">${sl} (${ss}${n.totalScore})</span></div></div>${hl||'<div class="text-dim" style="font-size:0.7rem">No recent news</div>'}<div class="sentiment-card-footer"><span>${n.newsCount} article${n.newsCount!==1?'s':''}</span><div class="sentiment-card-actions"><button class="btn btn-sm" style="font-size:0.55rem;padding:2px 8px" onclick="openResearchFor('${n.symbol}')">Research</button></div></div></div>`}).join('')+'</div>'}
 
-function renderStats(s){const el=document.getElementById('stats-container');if(!s){el.innerHTML='<div class="empty">No data</div>';return}const wr=s.winRate||0,wc=wr>=60?'text-green':wr>=40?'text-yellow':'text-red';el.innerHTML=`<table><tr><td class="text-dim">Trades</td><td class="text-bold">${s.totalTrades||0}</td></tr><tr><td class="text-dim">W/L</td><td><span class="text-green">${s.wins||0}W</span>/<span class="text-red">${s.losses||0}L</span></td></tr><tr><td class="text-dim">Win Rate</td><td class="${wc} text-bold">${wr}%</td></tr><tr><td class="text-dim">Total P&L</td><td class="${pc(s.totalPnl||0)} text-bold">${INR(s.totalPnl)}</td></tr><tr><td class="text-dim">Avg Win</td><td class="text-green">${INR(s.avgWin)}</td></tr><tr><td class="text-dim">Avg Loss</td><td class="text-red">${INR(s.avgLoss)}</td></tr><tr><td class="text-dim">Best</td><td class="text-green">${INR(s.bestTrade?.pnl)}</td></tr><tr><td class="text-dim">Worst</td><td class="text-red">${INR(s.worstTrade?.pnl)}</td></tr></table>`}
+function renderStats(s){const el=document.getElementById('stats-container');if(!s){el.innerHTML='<div class="empty">No data</div>';return}const wr=s.winRate||0,wc=wr>=60?'text-green':wr>=40?'text-yellow':'text-red';const wrBarColor=wr>=60?'var(--green)':wr>=40?'var(--yellow)':'var(--red)';el.innerHTML=`<table><tr><td class="text-dim">Trades</td><td class="text-bold">${s.totalTrades||0}</td></tr><tr><td class="text-dim">W/L</td><td><span class="text-green">${s.wins||0}W</span>/<span class="text-red">${s.losses||0}L</span></td></tr><tr><td class="text-dim">Win Rate</td><td><span class="${wc} text-bold">${wr}%</span><div class="winrate-bar-track"><div class="winrate-bar-fill" style="width:${wr}%;background:${wrBarColor}"></div></div></td></tr><tr><td class="text-dim">Total P&L</td><td class="${pc(s.totalPnl||0)} text-bold">${INR(s.totalPnl)}</td></tr><tr><td class="text-dim">Avg Win</td><td class="text-green">${INR(s.avgWin)}</td></tr><tr><td class="text-dim">Avg Loss</td><td class="text-red">${INR(s.avgLoss)}</td></tr><tr><td class="text-dim">Best</td><td class="text-green">${INR(s.bestTrade?.pnl)}</td></tr><tr><td class="text-dim">Worst</td><td class="text-red">${INR(s.worstTrade?.pnl)}</td></tr></table>`}
 
 function renderHistory(h){const el=document.getElementById('history-container');document.getElementById('history-badge').textContent=`${h.length} trades`;if(!h.length){el.innerHTML='<div class="empty">No history</div>';return}el.innerHTML=`<table><thead><tr><th>Date</th><th>Symbol</th><th>Type</th><th>Entry</th><th>Exit</th><th>P&L</th><th></th></tr></thead><tbody>${h.map(t=>{const pnl=t.pnl||0;const st=t.status==='STOPPED'?'badge-red':pnl>=0?'badge-green':'badge-red';const sl=t.status==='STOPPED'?'STOP':pnl>=0?'WIN':'LOSS';const d=t.exited_at?new Date(t.exited_at).toLocaleDateString('en-IN',{day:'2-digit',month:'short'}):'--';return`<tr><td class="text-dim">${d}</td><td class="text-bold">${t.symbol}</td><td class="${t.type==='CALL'?'text-green':'text-red'}">${t.type}</td><td>${INR2(t.entry_price)}</td><td>${INR2(t.exit_price)}</td><td class="${pc(pnl)} text-bold">${INR(pnl)}</td><td><span class="badge ${st}">${sl}</span></td></tr>`}).join('')}</tbody></table>`}
 
@@ -1111,7 +1258,8 @@ async function initialLoad(){
   loadRiskDashboard();
   loadEquityCurve(7);
 }
-async function refreshAll(){await Promise.all([loadDashboard(),loadMarketStatus(),loadRecommendations(),loadPicks(),loadLiveNews(),loadAgentStatus(),loadRiskDashboard()]);loadNews();toast('Dashboard refreshed','info',2000)}
+function updateTimestamp(){document.getElementById('last-updated').textContent=`Live: ${new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}`}
+async function refreshAll(){await Promise.all([loadDashboard(),loadMarketStatus(),loadRecommendations(),loadPicks(),loadLiveNews(),loadAgentStatus(),loadRiskDashboard()]);loadNews();updateTimestamp();toast('Dashboard refreshed','info',2000)}
 
 initialLoad();
 // Fallback polling (SSE handles most live updates)
@@ -1120,13 +1268,16 @@ setInterval(loadMarketStatus,120000);
 setInterval(loadRecommendations,600000);
 setInterval(loadAgentStatus,30000);
 setInterval(loadRiskDashboard,30000);
+setInterval(loadLiveNews,300000);
+setInterval(loadNews,600000);
+setInterval(updateTimestamp,1000);
 
 // ══════════════ ACTIONS ══════════════
 
 function openModal(id){document.getElementById(id).classList.add('open')}
 function closeModal(id){document.getElementById(id).classList.remove('open')}
 document.querySelectorAll('.modal-overlay').forEach(m=>{m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('open')})});
-document.addEventListener('keydown',e=>{if(e.target.tagName==='INPUT'||e.target.tagName==='SELECT'||e.target.tagName==='TEXTAREA')return;if(e.key==='Escape'){document.querySelectorAll('.modal-overlay.open').forEach(m=>m.classList.remove('open'));return}if(e.key==='s'||e.key==='S'){e.preventDefault();runScan()}if(e.key==='r'||e.key==='R'){e.preventDefault();openResearchModal()}if(e.key==='t'||e.key==='T'){e.preventDefault();openTradeWizard()}});
+document.addEventListener('keydown',e=>{if(e.target.tagName==='INPUT'||e.target.tagName==='SELECT'||e.target.tagName==='TEXTAREA')return;if(e.key==='Escape'){document.querySelectorAll('.modal-overlay.open').forEach(m=>m.classList.remove('open'));return}if(e.key==='s'||e.key==='S'){e.preventDefault();runScan()}if(e.key==='r'||e.key==='R'){e.preventDefault();openResearchModal()}if(e.key==='t'||e.key==='T'){e.preventDefault();openTradeWizard()}if(e.key==='?'){e.preventDefault();openModal('modal-shortcuts')}});
 
 // ── Quick Trade ──
 function quickTrade(sym,type,entry,sl,t1,t2,lotSize,conf){_quickTradeData={symbol:sym,type,entryPrice:entry,stopLoss:sl,target1:t1,target2:t2,lotSize,confidence:conf,reason:`Screener ${type} recommendation`};const risk=Math.abs(entry-sl);const reward=Math.abs(t1-entry);const rr=risk>0?(reward/risk).toFixed(1):'--';document.getElementById('quick-trade-msg').innerHTML='';document.getElementById('quick-trade-info').innerHTML=`<div style="background:var(--bg);border:1px solid var(--card-border);border-radius:8px;padding:16px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><span style="font-size:1.2rem;font-weight:700">${sym}</span><span class="badge ${type==='CALL'?'badge-green':'badge-red'}" style="font-size:0.8rem">${type}</span></div><div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;text-align:center"><div><div class="sugg-label">Entry</div><div style="font-size:0.9rem;font-weight:700">₹${entry.toFixed(1)}</div></div><div><div class="sugg-label">Stop Loss</div><div class="text-red" style="font-size:0.9rem;font-weight:700">₹${sl.toFixed(1)}</div></div><div><div class="sugg-label">Target 1</div><div class="text-green" style="font-size:0.9rem;font-weight:700">₹${t1.toFixed(1)}</div></div><div><div class="sugg-label">Target 2</div><div class="text-green" style="font-size:0.9rem;font-weight:700">₹${t2.toFixed(1)}</div></div></div><div style="display:flex;justify-content:space-between;margin-top:10px;font-size:0.65rem;color:var(--text-dim)"><span>Lot: ${lotSize}</span><span>Risk: ₹${risk.toFixed(1)}</span><span>R:R ${rr}x</span><span>Score: ${conf}</span></div></div>`;openModal('modal-quick-trade')}
