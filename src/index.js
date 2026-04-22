@@ -42,13 +42,25 @@ program
 
 // ─── research ───────────────────────────────────────────────────────────────
 program
-  .command('research <symbol>')
-  .description('Research a stock — quick analysis by default')
+  .command('research <modeOrSymbol> [symbol]')
+  .description('Research a stock — `research quick RELIANCE` or `research deep RELIANCE` or `research RELIANCE --deep`')
   .option('-d, --deep', 'Run deep analysis (90-day history + options)')
-  .action(async (symbol, opts) => {
+  .action(async (modeOrSymbol, symbol, opts) => {
     try {
-      const mode = opts.deep ? 'deep' : 'quick';
-      await runResearch(symbol, mode);
+      let mode = 'quick';
+      let sym;
+      if (['quick', 'deep'].includes(modeOrSymbol.toLowerCase())) {
+        mode = modeOrSymbol.toLowerCase();
+        sym = symbol;
+      } else {
+        sym = modeOrSymbol;
+        if (opts.deep) mode = 'deep';
+      }
+      if (!sym) {
+        console.error(chalk.red('Usage: tradeoracle research [quick|deep] <SYMBOL>'));
+        process.exit(1);
+      }
+      await runResearch(sym.toUpperCase(), mode);
     } catch (err) {
       console.error(chalk.red(`Research failed: ${err.message}`));
       process.exit(1);
