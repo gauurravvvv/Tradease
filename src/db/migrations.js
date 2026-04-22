@@ -73,4 +73,10 @@ export function runMigrations(db) {
       created_at TEXT    NOT NULL DEFAULT (datetime('now'))
     );
   `);
+
+  // Migration: add ending_capital to daily_summary if not present
+  const cols = db.prepare("PRAGMA table_info(daily_summary)").all();
+  if (!cols.some(c => c.name === 'ending_capital')) {
+    db.exec('ALTER TABLE daily_summary ADD COLUMN ending_capital REAL');
+  }
 }
