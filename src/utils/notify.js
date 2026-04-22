@@ -1,5 +1,6 @@
 import notifier from 'node-notifier';
 import { logger } from './logger.js';
+import { isTelegramConfigured, telegramTradeEntry, telegramTradeExit, telegramStopLoss, telegramTargetHit, telegramDailySummary, telegramIndexCrash, telegramDaemonStart } from './telegram.js';
 
 const APP_NAME = 'Tradease';
 
@@ -31,12 +32,13 @@ export function notify(title, message, level = 'info') {
 // Convenience methods for common events
 // ---------------------------------------------------------------------------
 
-export function notifyTradeEntry(symbol, type, price) {
+export function notifyTradeEntry(symbol, type, price, confidence) {
   notify(
     `${type} Entered`,
     `${symbol} @ ₹${price}`,
     'trade'
   );
+  telegramTradeEntry(symbol, type, price, confidence);
 }
 
 export function notifyTradeExit(symbol, type, price, pnl) {
@@ -46,6 +48,7 @@ export function notifyTradeExit(symbol, type, price, pnl) {
     `${symbol} @ ₹${price} | P&L: ${pnlStr}`,
     pnl >= 0 ? 'trade' : 'warning'
   );
+  telegramTradeExit(symbol, type, price, pnl);
 }
 
 export function notifyStopLoss(symbol, price) {
@@ -54,6 +57,7 @@ export function notifyStopLoss(symbol, price) {
     `${symbol} stopped at ₹${price}`,
     'warning'
   );
+  telegramStopLoss(symbol, price);
 }
 
 export function notifyTargetHit(symbol, targetNum, price) {
@@ -62,6 +66,7 @@ export function notifyTargetHit(symbol, targetNum, price) {
     `${symbol} reached ₹${price}`,
     'trade'
   );
+  telegramTargetHit(symbol, targetNum, price);
 }
 
 export function notifyIndexCrash(indexName, changePct) {
@@ -70,6 +75,7 @@ export function notifyIndexCrash(indexName, changePct) {
     `${indexName} ${changePct.toFixed(1)}% — exiting all positions`,
     'critical'
   );
+  telegramIndexCrash(indexName, changePct);
 }
 
 export function notifyScanComplete(count) {
@@ -82,17 +88,19 @@ export function notifyScanComplete(count) {
 
 export function notifyDaemonStart() {
   notify('Daemon Started', 'Schedulers and monitors running', 'info');
+  telegramDaemonStart();
 }
 
 export function notifyDaemonStop() {
   notify('Daemon Stopped', 'All jobs halted', 'info');
 }
 
-export function notifyDailySummary(totalPnl, winRate, trades) {
+export function notifyDailySummary(totalPnl, winRate, trades, capital) {
   const pnlStr = totalPnl >= 0 ? `+₹${totalPnl.toFixed(0)}` : `-₹${Math.abs(totalPnl).toFixed(0)}`;
   notify(
     'Daily Summary',
     `P&L: ${pnlStr} | Win: ${winRate}% | Trades: ${trades}`,
     totalPnl >= 0 ? 'info' : 'warning'
   );
+  telegramDailySummary(totalPnl, winRate, trades, capital);
 }

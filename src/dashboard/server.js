@@ -988,6 +988,75 @@ export function startDashboard(port = 3777) {
     }, 15_000); // 15-second base tick
   }
 
+  // ── Agent Configuration ──────────────────────────────────────────────────
+
+  app.get('/api/agent-config', async (req, res) => {
+    try {
+      const { TRADING } = await import('../config/settings.js');
+      res.json({
+        maxPositions: TRADING.MAX_POSITIONS,
+        maxCapitalPerPosition: TRADING.MAX_CAPITAL_PER_POSITION * 100,
+        maxLossPerTrade: TRADING.MAX_LOSS_PER_TRADE * 100,
+        atrStopMultiplier: TRADING.ATR_STOP_MULTIPLIER,
+        trailingStopATR: TRADING.TRAILING_STOP_ATR,
+        trailingTriggerPct: TRADING.TRAILING_TRIGGER_PCT,
+        riskRewardT1: TRADING.RISK_REWARD.T1,
+        riskRewardT2: TRADING.RISK_REWARD.T2,
+        noNewEntryAfter: TRADING.NO_NEW_ENTRY_AFTER,
+        autoEntryThreshold: 70,
+        minVolumeRatio: 1.0,
+      });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post('/api/agent-config', express.json(), async (req, res) => {
+    try {
+      const { TRADING } = await import('../config/settings.js');
+      const c = req.body;
+      if (c.maxPositions != null) TRADING.MAX_POSITIONS = parseInt(c.maxPositions);
+      if (c.maxCapitalPerPosition != null) TRADING.MAX_CAPITAL_PER_POSITION = parseFloat(c.maxCapitalPerPosition) / 100;
+      if (c.maxLossPerTrade != null) TRADING.MAX_LOSS_PER_TRADE = parseFloat(c.maxLossPerTrade) / 100;
+      if (c.atrStopMultiplier != null) TRADING.ATR_STOP_MULTIPLIER = parseFloat(c.atrStopMultiplier);
+      if (c.trailingStopATR != null) TRADING.TRAILING_STOP_ATR = parseFloat(c.trailingStopATR);
+      if (c.trailingTriggerPct != null) TRADING.TRAILING_TRIGGER_PCT = parseFloat(c.trailingTriggerPct);
+      if (c.riskRewardT1 != null) TRADING.RISK_REWARD.T1 = parseFloat(c.riskRewardT1);
+      if (c.riskRewardT2 != null) TRADING.RISK_REWARD.T2 = parseFloat(c.riskRewardT2);
+      if (c.noNewEntryAfter != null) TRADING.NO_NEW_ENTRY_AFTER = c.noNewEntryAfter;
+      res.json({ success: true, message: 'Configuration updated' });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── Telegram Configuration ─────────────────────────────────────────────
+
+  app.get('/api/telegram/status', async (req, res) => {
+    const { isTelegramConfigured } = await import('../utils/telegram.js');
+    res.json({ configured: isTelegramConfigured() });
+  });
+
+  app.post('/api/telegram/configure', async (req, res) => {
+    const { token, chatId } = req.body;
+    if (!token || !chatId) {
+      return res.status(400).json({ error: 'token and chatId required' });
+    }
+    const { configureTelegram, sendTelegram } = await import('../utils/telegram.js');
+    configureTelegram(token, chatId);
+    await sendTelegram('✅ Tradease connected! You will receive trade alerts here.');
+    res.json({ success: true });
+  });
+
+  app.post('/api/telegram/test', async (req, res) => {
+    const { sendTelegram, isTelegramConfigured } = await import('../utils/telegram.js');
+    if (!isTelegramConfigured()) {
+      return res.status(400).json({ error: 'Telegram not configured' });
+    }
+    await sendTelegram('🧪 Test message from Tradease dashboard!');
+    res.json({ success: true });
+  });
+
   // Start server
   const server = app.listen(port, () => {
     logger.info(`[dashboard] Running at http://localhost:${port}`);
