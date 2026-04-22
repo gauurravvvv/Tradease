@@ -665,6 +665,26 @@ export function startDashboard(port = 3777) {
     }
   });
 
+  // Run backtest from dashboard
+  app.post('/api/backtest/run', async (req, res) => {
+    try {
+      const { runBacktest } = await import('../backtesting/engine.js');
+      const { saveBacktestResult } = await import('../backtesting/report.js');
+      const { FNO_STOCKS } = await import('../data/fno-stocks.js');
+
+      const { strategy = 'screener', days = 90 } = req.body || {};
+      const end = new Date().toISOString().slice(0, 10);
+      const start = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+      const symbols = FNO_STOCKS.slice(0, 10).map(s => s.symbol);
+
+      const result = await runBacktest({ strategy, symbols, startDate: start, endDate: end });
+      saveBacktestResult(result);
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // Recommended trades with pre-computed entry/SL/targets
   app.get('/api/recommendations', async (req, res) => {
     try {

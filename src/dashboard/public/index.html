@@ -71,6 +71,7 @@
     .badge-yellow{background:rgba(234,179,8,0.15);color:var(--yellow)}
     .badge-gray{background:rgba(107,114,128,0.15);color:var(--text-dim)}
     .badge-cyan{background:rgba(6,182,212,0.15);color:var(--cyan)}
+    .badge-purple{background:rgba(168,85,247,0.15);color:var(--purple)}
     .badge-live{background:rgba(239,68,68,0.2);color:var(--red);animation:pulse 2s infinite}
 
     /* Tables */
@@ -296,7 +297,7 @@
     .perf-toggle-bar{display:flex;gap:4px;margin-bottom:10px}
     .perf-toggle{padding:4px 12px;font-size:0.6rem;border-radius:4px;border:1px solid var(--card-border);background:transparent;color:var(--text-dim);cursor:pointer;font-family:inherit}
     .perf-toggle.active{background:rgba(6,182,212,0.15);border-color:var(--cyan);color:var(--cyan)}
-    @media(max-width:900px){.risk-grid{grid-template-columns:1fr}.perf-charts{grid-template-columns:1fr}.risk-metrics{grid-template-columns:repeat(2,1fr)}}
+    @media(max-width:900px){.risk-grid{grid-template-columns:1fr}.perf-charts{grid-template-columns:1fr}.risk-metrics{grid-template-columns:repeat(2,1fr) !important}}
   </style>
   <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
 </head>
@@ -536,6 +537,25 @@
     </div>
   </div>
   <div id="perf-empty" style="display:none;text-align:center;padding:40px;color:var(--text-dim);font-size:0.7rem">Not enough data — charts populate after first trading day</div>
+  </div>
+</div>
+
+<!-- Backtesting -->
+<div class="section" id="backtest-section">
+  <div class="section-header" onclick="toggleSection(this)">
+    <span class="section-title"><span class="chevron">▼</span>Backtesting</span>
+    <div class="section-actions">
+      <span class="badge badge-gray" id="backtest-badge">--</span>
+      <select id="backtest-strategy" style="background:var(--bg);border:1px solid var(--card-border);color:var(--text);font-family:inherit;font-size:0.6rem;padding:3px 8px;border-radius:4px" onclick="event.stopPropagation()">
+        <option value="screener">Screener</option>
+        <option value="momentum">Momentum</option>
+        <option value="meanreversion">Mean Reversion</option>
+      </select>
+      <button class="btn btn-sm" onclick="runBacktest();event.stopPropagation()" id="btn-backtest">Run Backtest</button>
+    </div>
+  </div>
+  <div class="section-content">
+    <div id="backtest-container"><div class="empty">No backtest results yet — run a backtest to see strategy performance</div></div>
   </div>
 </div>
 
@@ -1321,6 +1341,96 @@ const fmt=n=>{if(n==null||isNaN(n))return'0';return Math.abs(n).toLocaleString('
       } catch (err) { console.error('Equity curve load failed:', err); }
     }
 
+// ── Backtesting ──
+async function loadBacktest() {
+  try {
+    const data = await api('/api/backtest/latest');
+    const el = document.getElementById('backtest-container');
+    const badge = document.getElementById('backtest-badge');
+
+    if (!data.latest) {
+      badge.textContent = 'No runs';
+      el.innerHTML = '<div class="empty">No backtest results yet — run a backtest to see strategy performance</div>';
+      return;
+    }
+
+    const m = data.latest.metrics;
+    const cfg = data.latest.config || {};
+    badge.textContent = `${cfg.strategy || 'screener'} | ${m.totalTrades} trades`;
+
+    // Metrics cards
+    const metricCard = (label, value, color) =>
+      `<div class="risk-metric"><div class="risk-metric-label">${label}</div><div class="risk-metric-value ${color}">${value}</div></div>`;
+
+    let html = `<div style="display:flex;gap:12px;margin-bottom:14px;flex-wrap:wrap;font-size:0.65rem;color:var(--text-dim)">
+      <span>Strategy: <b style="color:var(--cyan)">${cfg.strategy || '--'}</b></span>
+      <span>Period: <b>${cfg.startDate || '--'} → ${cfg.endDate || '--'}</b></span>
+      <span>Symbols: <b>${cfg.symbols?.length || '--'}</b></span>
+    </div>`;
+
+    html += `<div class="risk-metrics" style="grid-template-columns:repeat(6,1fr);margin-bottom:14px">
+      ${metricCard('Total P&L', `${m.totalPnl >= 0 ? '+' : ''}₹${Math.abs(m.totalPnl).toLocaleString('en-IN')}`, m.totalPnl >= 0 ? 'text-green' : 'text-red')}
+      ${metricCard('Return', `${m.totalReturnPct >= 0 ? '+' : ''}${m.totalReturnPct}%`, m.totalReturnPct >= 0 ? 'text-green' : 'text-red')}
+      ${metricCard('Win Rate', `${m.winRate}%`, m.winRate >= 50 ? 'text-green' : 'text-red')}
+      ${metricCard('Sharpe', m.sharpeRatio, m.sharpeRatio > 1 ? 'text-green' : m.sharpeRatio > 0 ? 'text-yellow' : 'text-red')}
+      ${metricCard('Max DD', `${m.maxDrawdown}%`, 'text-red')}
+      ${metricCard('Profit Factor', m.profitFactor === Infinity ? '∞' : m.profitFactor, m.profitFactor > 1 ? 'text-green' : 'text-red')}
+    </div>`;
+
+    // Detailed stats grid
+    html += `<div class="risk-metrics" style="grid-template-columns:repeat(5,1fr)">
+      ${metricCard('Trades', m.totalTrades, '')}
+      ${metricCard('Winners', m.winners, 'text-green')}
+      ${metricCard('Losers', m.losers, 'text-red')}
+      ${metricCard('Best Trade', `₹${Math.abs(m.bestTrade).toLocaleString('en-IN')}`, 'text-green')}
+      ${metricCard('Worst Trade', `-₹${Math.abs(m.worstTrade).toLocaleString('en-IN')}`, 'text-red')}
+      ${metricCard('Avg Win', `₹${Math.abs(m.avgWin).toLocaleString('en-IN')}`, 'text-green')}
+      ${metricCard('Avg Loss', `-₹${Math.abs(m.avgLoss).toLocaleString('en-IN')}`, 'text-red')}
+      ${metricCard('Avg Hold', `${m.avgHoldingDays}d`, '')}
+      ${metricCard('Win Streak', m.consecutiveWins, 'text-green')}
+      ${metricCard('Loss Streak', m.consecutiveLosses, 'text-red')}
+    </div>`;
+
+    // History table
+    if (data.history && data.history.length > 1) {
+      html += `<div style="margin-top:14px"><div style="font-size:0.6rem;color:var(--text-dim);margin-bottom:6px">PREVIOUS RUNS</div>
+        <table><thead><tr><th>Date</th><th>Strategy</th><th>Trades</th><th>Win Rate</th><th>Return</th></tr></thead>
+        <tbody>${data.history.slice(0, 8).map(h => `<tr>
+          <td>${h.date}</td>
+          <td><span class="badge badge-cyan">${h.strategy}</span></td>
+          <td>${h.totalTrades}</td>
+          <td class="${h.winRate >= 50 ? 'text-green' : 'text-red'}">${h.winRate}%</td>
+          <td class="${h.totalReturn >= 0 ? 'text-green' : 'text-red'}">${h.totalReturn >= 0 ? '+' : ''}${h.totalReturn}%</td>
+        </tr>`).join('')}</tbody></table></div>`;
+    }
+
+    el.innerHTML = html;
+  } catch (err) {
+    document.getElementById('backtest-container').innerHTML = '<div class="empty">Failed to load backtest data</div>';
+  }
+}
+
+async function runBacktest() {
+  const btn = document.getElementById('btn-backtest');
+  const strategy = document.getElementById('backtest-strategy').value;
+  btn.disabled = true;
+  btn.textContent = 'Running...';
+  toast(`Running ${strategy} backtest — this may take a minute...`, 'info', 10000);
+  try {
+    const result = await api('/api/backtest/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ strategy, days: 90 }),
+    });
+    toast(`Backtest complete: ${result.metrics.totalTrades} trades, ${result.metrics.winRate}% win rate`, 'success');
+    loadBacktest();
+  } catch (e) {
+    toast('Backtest failed: ' + e.message, 'error', 5000);
+  }
+  btn.disabled = false;
+  btn.textContent = 'Run Backtest';
+}
+
 // ── Trade Journal ──
 let _journalDays = 7;
 async function loadJournal(days, btnEl) {
@@ -1402,6 +1512,7 @@ async function initialLoad(){
   loadPicks().then(()=>loadNews());
   loadRiskDashboard();
   loadEquityCurve(7);
+  loadBacktest();
   loadJournal();
 }
 function updateTimestamp(){document.getElementById('last-updated').textContent=`Live: ${new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}`}
