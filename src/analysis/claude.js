@@ -8,10 +8,13 @@ import { spawn } from 'child_process';
  * @returns {Promise<string>} Claude's response text.
  */
 export async function askClaude(prompt, options = {}) {
-  const { timeout = 120_000, maxTokens = 4000 } = options;
+  const { timeout = 120_000, maxTokens = 4000, model = null } = options;
 
   return new Promise((resolve, reject) => {
-    const args = ['--print', '-p', prompt];
+    const args = ['--print'];
+    if (model) args.push('--model', model);
+    if (maxTokens) args.push('--max-tokens', String(maxTokens));
+    args.push('-p', prompt);
     const env = { ...process.env };
     delete env.CLAUDECODE;
     delete env.CLAUDE_CODE;

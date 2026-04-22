@@ -196,6 +196,60 @@ program
     }
   });
 
+// ─── agents ──────────────────────────────────────────────────────────────────
+program
+  .command('agents')
+  .description('Start autonomous trading agents (news + trade + position)')
+  .option('-p, --port <number>', 'Also start dashboard on this port')
+  .action(async (opts) => {
+    try {
+      getDb();
+      const { AgentOrchestrator, setOrchestrator } = await import('./agents/orchestrator.js');
+      const orchestrator = new AgentOrchestrator();
+      setOrchestrator(orchestrator);
+
+      displayHeader('Tradease Agents', 'Autonomous trading agents');
+
+      await orchestrator.start();
+
+      console.log(chalk.bold.white('\n  Agents:'));
+      console.log(chalk.cyan('    News Sentinel      — every 5 min  (rule-based sentiment)'));
+      console.log(chalk.green('    Trade Strategist   — every 10 min (rule-based entries)'));
+      console.log(chalk.yellow('    Position Guardian  — every 2 min  (mechanical exits)'));
+      console.log(chalk.gray('\n  Claude called ONLY at decision boundaries (Haiku model)'));
+
+      // Optionally start dashboard too
+      if (opts.port) {
+        const port = parseInt(opts.port, 10);
+        startDashboard(port);
+        console.log(chalk.green.bold(`\n  Dashboard: http://localhost:${port}`));
+      }
+
+      console.log(chalk.green.bold('\n  All agents running autonomously.'));
+      console.log(chalk.gray('  Press Ctrl+C to stop.\n'));
+
+      // Stats every 5 min
+      setInterval(() => {
+        const status = orchestrator.getStatus();
+        for (const a of status.agents) {
+          const name = (a.name || '').padEnd(20);
+          console.log(chalk.gray(`  [${name}] runs:${a.runs||0} claude:${a.claudeCalls||0} tokens:${a.totalTokens||0} err:${a.errors||0}`));
+        }
+      }, 5 * 60 * 1000);
+
+      const shutdown = () => {
+        orchestrator.stop();
+        closeDb();
+        process.exit(0);
+      };
+      process.on('SIGINT', shutdown);
+      process.on('SIGTERM', shutdown);
+    } catch (err) {
+      console.error(chalk.red(`Agents failed: ${err.message}`));
+      process.exit(1);
+    }
+  });
+
 // ─── daemon ─────────────────────────────────────────────────────────────────
 program
   .command('daemon')
@@ -288,6 +342,12 @@ program
       const listeners = new ListenerManager({ tickIntervalMs: 60_000 });
       listeners.start();
 
+      // Start autonomous agents
+      const { AgentOrchestrator, setOrchestrator } = await import('./agents/orchestrator.js');
+      const agentOrchestrator = new AgentOrchestrator();
+      setOrchestrator(agentOrchestrator);
+      await agentOrchestrator.start();
+
       // Log schedule summary
       console.log(chalk.bold.white('\n  Schedule:'));
       console.log(chalk.gray(`    Pre-Market Scan:    ${SCHEDULE.PRE_MARKET_SCAN}`));
@@ -297,6 +357,11 @@ program
       console.log(chalk.gray(`    Position Monitor:   ${SCHEDULE.POSITION_MONITOR}`));
       console.log(chalk.gray(`    Wind Down:          ${SCHEDULE.WIND_DOWN}`));
       console.log(chalk.gray(`    Post Market:        ${SCHEDULE.POST_MARKET}`));
+      console.log('');
+      console.log(chalk.bold.white('  Agents:'));
+      console.log(chalk.cyan('    News Sentinel      — every 5 min'));
+      console.log(chalk.green('    Trade Strategist   — every 10 min'));
+      console.log(chalk.yellow('    Position Guardian  — every 2 min'));
       console.log('');
       console.log(chalk.green.bold('  Tradease daemon running...'));
       console.log(chalk.gray('  Press Ctrl+C to stop.\n'));
@@ -309,6 +374,7 @@ program
         logger.info(`[daemon] Received ${signal}. Shutting down...`);
         scheduler.stop();
         listeners.stop();
+        agentOrchestrator.stop();
         closeDb();
         notifyDaemonStop();
         logger.info('[daemon] Shutdown complete.');

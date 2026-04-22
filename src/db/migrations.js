@@ -47,5 +47,30 @@ export function runMigrations(db) {
       data      TEXT NOT NULL,
       cached_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE IF NOT EXISTS agent_signals (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      agent       TEXT    NOT NULL,
+      symbol      TEXT,
+      signal_type TEXT    NOT NULL,
+      confidence  INTEGER DEFAULT 0,
+      data        TEXT,
+      created_at  TEXT    NOT NULL DEFAULT (datetime('now')),
+      consumed    INTEGER NOT NULL DEFAULT 0,
+      consumed_by TEXT,
+      consumed_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS agent_logs (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      agent      TEXT    NOT NULL,
+      action     TEXT    NOT NULL,
+      symbol     TEXT,
+      details    TEXT,
+      tokens_in  INTEGER DEFAULT 0,
+      tokens_out INTEGER DEFAULT 0,
+      skipped    INTEGER DEFAULT 0,
+      created_at TEXT    NOT NULL DEFAULT (datetime('now'))
+    );
   `);
 }

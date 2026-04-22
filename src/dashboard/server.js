@@ -2,21 +2,32 @@ import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { getDb } from '../db/sqlite.js';
-import { getOpenTrades, getTradeHistory } from '../trading/manager.js';
+import { getOpenTrades, getTradeHistory, enterTrade, exitTrade, partialExit } from '../trading/manager.js';
 import { getPortfolioSummary, getPerformanceStats } from '../trading/portfolio.js';
+import { calculateStopLoss, calculateTargets, calculatePositionSize, validateTrade } from '../trading/risk.js';
 import { checkIndexHealth } from '../listeners/index-monitor.js';
-import { getStockNews } from '../data/news.js';
+import { getStockNews, fetchAllNews } from '../data/news.js';
 import { scoreSentiment, classifySentiment } from '../listeners/news-monitor.js';
 import { getGlobalCues } from '../data/global-cues.js';
 import { getFiiDiiData } from '../data/fii-dii.js';
 import { getSectorStrength } from '../analysis/sectors.js';
 import { screenStocks } from '../analysis/screener.js';
-import { fetchAllNews } from '../data/news.js';
+import { getQuote, getHistorical } from '../data/market.js';
+import { analyzeTechnicals, computeATR } from '../analysis/technicals.js';
 import { logger } from '../utils/logger.js';
+import { getOrchestrator, setOrchestrator, AgentOrchestrator } from '../agents/orchestrator.js';
 
 // Cache for expensive operations
 const screenerCache = { data: null, ts: 0 };
 const SCREENER_TTL = 10 * 60 * 1000; // 10 minutes
+
+// ── Live data caches (shared across SSE clients) ──
+const liveCache = {
+  trades: { data: null, ts: 0 },
+  news: { data: null, ts: 0 },
+  indices: { data: null, ts: 0 },
+};
+const sseClients = new Set();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -28,7 +39,8 @@ const __dirname = path.dirname(__filename);
 export function startDashboard(port = 3777) {
   const app = express();
 
-  // Serve static frontend
+  // Middleware
+  app.use(express.json());
   app.use(express.static(path.join(__dirname, 'public')));
 
   // ── API Routes ──────────────────────────────────────────────────────────
@@ -293,9 +305,511 @@ export function startDashboard(port = 3777) {
     }
   });
 
+  // ── Action API Routes ────────────────────────────────────────────────────
+
+  // Get live quote + technicals + trade suggestions for a symbol
+  app.get('/api/quote/:symbol', async (req, res) => {
+    try {
+      const symbol = req.params.symbol.toUpperCase();
+      const [quote, history] = await Promise.all([
+        getQuote(symbol),
+        getHistorical(symbol, 90).catch(() => []),
+      ]);
+
+      let technicals = null;
+      let atr = null;
+      let suggestions = null;
+
+      if (history.length >= 14) {
+        technicals = analyzeTechnicals(history);
+        atr = computeATR(history);
+      }
+
+      if (quote && atr) {
+        const callSL = calculateStopLoss(quote.price, atr, 'CALL');
+        const putSL = calculateStopLoss(quote.price, atr, 'PUT');
+        const callTargets = calculateTargets(quote.price, callSL, 'CALL');
+        const putTargets = calculateTargets(quote.price, putSL, 'PUT');
+        const portfolio = getPortfolioSummary();
+        const posSize = calculatePositionSize(portfolio.availableCapital, quote.price, 1);
+
+        suggestions = {
+          call: { entry: quote.price, stopLoss: callSL, target1: callTargets.target1, target2: callTargets.target2, riskPerLot: callTargets.riskPerLot },
+          put: { entry: quote.price, stopLoss: putSL, target1: putTargets.target1, target2: putTargets.target2, riskPerLot: putTargets.riskPerLot },
+          positionSize: posSize,
+          atr,
+        };
+      }
+
+      res.json({ quote, technicals, suggestions });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Quick research — quote + technicals + news + suggestions
+  app.get('/api/research/:symbol', async (req, res) => {
+    try {
+      const symbol = req.params.symbol.toUpperCase();
+      const [quote, history, articles] = await Promise.all([
+        getQuote(symbol),
+        getHistorical(symbol, 90).catch(() => []),
+        getStockNews(symbol).catch(() => []),
+      ]);
+
+      let technicals = null;
+      let atr = null;
+      let suggestions = null;
+
+      if (history.length >= 14) {
+        technicals = analyzeTechnicals(history);
+        atr = computeATR(history);
+      }
+
+      const scoredNews = articles.map(a => ({
+        title: a.title, link: a.link, source: a.source, pubDate: a.pubDate,
+        score: scoreSentiment(a),
+      }));
+      const newsScore = scoredNews.reduce((s, a) => s + a.score, 0);
+
+      if (quote && atr) {
+        const callSL = calculateStopLoss(quote.price, atr, 'CALL');
+        const putSL = calculateStopLoss(quote.price, atr, 'PUT');
+        const callTargets = calculateTargets(quote.price, callSL, 'CALL');
+        const putTargets = calculateTargets(quote.price, putSL, 'PUT');
+        const portfolio = getPortfolioSummary();
+
+        suggestions = {
+          call: { entry: quote.price, stopLoss: callSL, target1: callTargets.target1, target2: callTargets.target2, riskPerLot: callTargets.riskPerLot },
+          put: { entry: quote.price, stopLoss: putSL, target1: putTargets.target1, target2: putTargets.target2, riskPerLot: putTargets.riskPerLot },
+          atr,
+          availableCapital: portfolio.availableCapital,
+          openPositions: portfolio.openPositions,
+        };
+      }
+
+      res.json({
+        symbol, quote, technicals, suggestions,
+        news: { articles: scoredNews.slice(0, 8), totalScore: newsScore, sentiment: classifySentiment(newsScore) },
+      });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Enter a trade
+  app.post('/api/trades/enter', (req, res) => {
+    try {
+      getDb();
+      const { symbol, type, entryPrice, premium, lotSize, stopLoss, target1, target2, confidence, reason, expiry, strike } = req.body;
+      if (!symbol || !type || !entryPrice || !lotSize || !stopLoss) {
+        return res.status(400).json({ error: 'Missing required fields: symbol, type, entryPrice, lotSize, stopLoss' });
+      }
+      const trade = enterTrade({
+        symbol: symbol.toUpperCase(), type: type.toUpperCase(),
+        entryPrice: Number(entryPrice), premium: Number(premium || entryPrice * 0.02),
+        lotSize: Number(lotSize), stopLoss: Number(stopLoss),
+        target1: Number(target1 || 0), target2: Number(target2 || 0),
+        confidence: Number(confidence || 70), reason: reason || 'Manual UI entry',
+        expiry, strike: strike ? Number(strike) : undefined,
+      });
+      logger.trade(`[dashboard] Trade entered via UI: ${symbol} ${type} @ ${entryPrice}`);
+      res.json({ ok: true, trade });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Exit a trade
+  app.post('/api/trades/:id/exit', async (req, res) => {
+    try {
+      getDb();
+      const tradeId = parseInt(req.params.id, 10);
+      const { reason } = req.body || {};
+      const trades = getOpenTrades();
+      const trade = trades.find(t => t.id === tradeId);
+      if (!trade) return res.status(404).json({ error: 'Trade not found' });
+
+      let exitPrice = trade.current_price || trade.entry_price;
+      try { const q = await getQuote(trade.symbol); exitPrice = q.price; } catch {}
+      exitTrade(tradeId, exitPrice, reason || 'Manual UI exit');
+      logger.trade(`[dashboard] Trade exited via UI: ${trade.symbol} @ ${exitPrice}`);
+      res.json({ ok: true, exitPrice });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Partial exit a trade
+  app.post('/api/trades/:id/partial-exit', async (req, res) => {
+    try {
+      getDb();
+      const tradeId = parseInt(req.params.id, 10);
+      const { percentage, reason } = req.body || {};
+      const trades = getOpenTrades();
+      const trade = trades.find(t => t.id === tradeId);
+      if (!trade) return res.status(404).json({ error: 'Trade not found' });
+
+      let exitPrice = trade.current_price || trade.entry_price;
+      try { const q = await getQuote(trade.symbol); exitPrice = q.price; } catch {}
+      const pct = Number(percentage || 0.5);
+      partialExit(tradeId, pct, exitPrice, reason || `Partial exit ${Math.round(pct * 100)}% via UI`);
+      logger.trade(`[dashboard] Partial exit via UI: ${trade.symbol} ${Math.round(pct * 100)}% @ ${exitPrice}`);
+      res.json({ ok: true, exitPrice, percentage: pct });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Run screener scan (force fresh)
+  app.post('/api/scan', async (req, res) => {
+    try {
+      const screened = await screenStocks();
+      const picks = screened.slice(0, 15).map(s => ({
+        symbol: s.symbol, name: s.name, sector: s.sector,
+        price: s.price, changePct: s.changePct, volume: s.volume,
+        score: s.score, recommendation: s.recommendation,
+        lotSize: s.lotSize,
+        rsi: s.technicals?.rsi?.value, macdTrend: s.technicals?.macd?.trend,
+        atr: s.technicals?.atr?.value, volumeRatio: s.technicals?.volume?.ratio,
+        sectorRank: s.sectorRank, sectorTrend: s.sectorTrend,
+      }));
+      screenerCache.data = picks;
+      screenerCache.ts = Date.now();
+      logger.info(`[dashboard] Fresh scan via UI: ${picks.length} picks`);
+      res.json(picks);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Recommended trades with pre-computed entry/SL/targets
+  app.get('/api/recommendations', async (req, res) => {
+    try {
+      getDb();
+      const now = Date.now();
+      let picks = screenerCache.data;
+      if (!picks || (now - screenerCache.ts) >= SCREENER_TTL) {
+        const screened = await screenStocks();
+        picks = screened.slice(0, 15).map(s => ({
+          symbol: s.symbol, name: s.name, sector: s.sector,
+          price: s.price, changePct: s.changePct, volume: s.volume,
+          score: s.score, recommendation: s.recommendation,
+          lotSize: s.lotSize,
+          rsi: s.technicals?.rsi?.value, macdTrend: s.technicals?.macd?.trend,
+          atr: s.technicals?.atr?.value, volumeRatio: s.technicals?.volume?.ratio,
+          overallSignal: s.technicals?.overallSignal,
+          sectorRank: s.sectorRank, sectorTrend: s.sectorTrend,
+        }));
+        screenerCache.data = picks;
+        screenerCache.ts = now;
+      }
+
+      // Filter to actionable picks with trade params
+      const portfolio = getPortfolioSummary();
+      const actionable = picks
+        .filter(p => p.recommendation === 'CALL' || p.recommendation === 'PUT')
+        .slice(0, 8)
+        .map(p => {
+          const atr = p.atr || 0;
+          const type = p.recommendation;
+          const sl = atr ? calculateStopLoss(p.price, atr, type) : null;
+          const targets = sl ? calculateTargets(p.price, sl, type) : null;
+          const posSize = calculatePositionSize(portfolio.availableCapital, p.price, p.lotSize || 1);
+          return {
+            ...p, atr,
+            entry: p.price,
+            stopLoss: sl,
+            target1: targets?.target1 || null,
+            target2: targets?.target2 || null,
+            riskPerLot: targets?.riskPerLot || null,
+            riskReward: sl && targets ? Math.abs(targets.target1 - p.price) / Math.abs(p.price - sl) : null,
+            maxLots: posSize.lots,
+            capitalRequired: posSize.capitalRequired,
+            canTrade: portfolio.openPositions < 3 && posSize.lots > 0,
+          };
+        });
+
+      res.json({
+        recommendations: actionable,
+        portfolio: { available: portfolio.availableCapital, positions: portfolio.openPositions, maxPositions: 3 },
+        scannedAt: screenerCache.ts ? new Date(screenerCache.ts).toISOString() : null,
+      });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Validate a potential trade before entry
+  app.post('/api/trades/validate', (req, res) => {
+    try {
+      getDb();
+      const { symbol, type, capitalRequired, maxLoss } = req.body;
+      const portfolio = getPortfolioSummary();
+      const result = validateTrade(
+        { symbol, type, capitalRequired: Number(capitalRequired), maxLoss: Number(maxLoss) },
+        { positions: portfolio.trades, capitalUsed: portfolio.capitalInUse, totalCapital: portfolio.totalCapital }
+      );
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── Agent API Routes ───────────────────────────────────────────────────
+
+  // Start/stop agents from dashboard
+  app.post('/api/agents/start', async (req, res) => {
+    try {
+      let orch = getOrchestrator();
+      if (!orch) {
+        orch = new AgentOrchestrator();
+        setOrchestrator(orch);
+      }
+      if (!orch.isRunning()) {
+        await orch.start();
+      }
+      res.json({ ok: true, running: true });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post('/api/agents/stop', (req, res) => {
+    try {
+      const orch = getOrchestrator();
+      if (orch && orch.isRunning()) orch.stop();
+      res.json({ ok: true, running: false });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Agent status
+  app.get('/api/agents/status', (req, res) => {
+    try {
+      const orch = getOrchestrator();
+      if (!orch) {
+        // Return DB-based stats even when orchestrator not in this process
+        const db = getDb();
+        const agents = ['news-sentinel', 'trade-strategist', 'position-guardian'];
+        const status = agents.map(name => {
+          const stats = db.prepare(
+            `SELECT COUNT(*) as runs, SUM(skipped) as skipped, SUM(tokens_in + tokens_out) as tokens
+             FROM agent_logs WHERE agent = ? AND created_at > datetime('now', '-1 hour')`
+          ).get(name);
+          const errors = db.prepare(
+            `SELECT COUNT(*) as count FROM agent_logs WHERE agent = ? AND action = 'error' AND created_at > datetime('now', '-1 hour')`
+          ).get(name);
+          const last = db.prepare(
+            'SELECT action, symbol, details, created_at FROM agent_logs WHERE agent = ? ORDER BY created_at DESC LIMIT 1'
+          ).get(name);
+          return {
+            name, runs: stats?.runs || 0, skipped: stats?.skipped || 0,
+            tokens: stats?.tokens || 0, errors: errors?.count || 0,
+            lastAction: last?.action || 'idle', lastRun: last?.created_at || null,
+          };
+        });
+        return res.json({ running: false, agents: status });
+      }
+      const hourly = orch.getHourlyStats();
+      const tokenUsage = orch.getTodayTokenUsage();
+      res.json({ running: orch.isRunning(), agents: hourly, tokenUsage });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Recent agent logs
+  app.get('/api/agents/logs', (req, res) => {
+    try {
+      const db = getDb();
+      const limit = parseInt(req.query.limit || '30', 10);
+      const logs = db.prepare('SELECT * FROM agent_logs ORDER BY created_at DESC LIMIT ?').all(limit);
+      res.json(logs);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Pending signals
+  app.get('/api/agents/signals', (req, res) => {
+    try {
+      const db = getDb();
+      const signals = db.prepare('SELECT * FROM agent_signals WHERE consumed = 0 ORDER BY created_at DESC').all();
+      res.json(signals);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Toggle individual agent
+  app.post('/api/agents/:name/toggle', (req, res) => {
+    try {
+      const orch = getOrchestrator();
+      if (!orch) return res.status(400).json({ error: 'Agents not running' });
+      const { enabled } = req.body || {};
+      const ok = orch.setAgentEnabled(req.params.name, enabled !== false);
+      res.json({ ok });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── Live Data Endpoints ──────────────────────────────────────────────────
+
+  // General finance news (all RSS feeds, not stock-specific)
+  app.get('/api/live-news', async (req, res) => {
+    try {
+      const now = Date.now();
+      if (liveCache.news.data && (now - liveCache.news.ts) < 120_000) {
+        return res.json(liveCache.news.data);
+      }
+      const articles = await fetchAllNews();
+      const scored = articles.slice(0, 30).map(a => ({
+        title: a.title, link: a.link, source: a.source,
+        pubDate: a.pubDate, snippet: a.snippet,
+        score: scoreSentiment(a),
+      }));
+      liveCache.news.data = scored;
+      liveCache.news.ts = now;
+      res.json(scored);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Live trade prices — fetch fresh quotes for open positions
+  app.get('/api/trades/live', async (req, res) => {
+    try {
+      getDb();
+      const trades = getOpenTrades();
+      if (!trades.length) return res.json([]);
+
+      const symbols = [...new Set(trades.map(t => t.symbol))];
+      const quotes = {};
+      await Promise.allSettled(
+        symbols.map(async (sym) => {
+          try { const q = await getQuote(sym); quotes[sym] = q.price; } catch {}
+        })
+      );
+
+      const enriched = trades.map(t => {
+        const cp = quotes[t.symbol] || t.current_price || t.entry_price;
+        const pnl = t.type === 'CALL'
+          ? (cp - t.entry_price) * t.lot_size * t.quantity
+          : (t.entry_price - cp) * t.lot_size * t.quantity;
+        const pnlPct = t.entry_price ? ((cp - t.entry_price) / t.entry_price * 100) : 0;
+        return { ...t, current_price: cp, live_pnl: pnl, live_pnl_pct: pnlPct };
+      });
+      res.json(enriched);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── Server-Sent Events stream ──────────────────────────────────────────
+
+  app.get('/api/stream', (req, res) => {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    });
+    res.write('data: {"type":"connected"}\n\n');
+
+    sseClients.add(res);
+    logger.info(`[sse] Client connected (${sseClients.size} total)`);
+
+    req.on('close', () => {
+      sseClients.delete(res);
+      logger.info(`[sse] Client disconnected (${sseClients.size} total)`);
+    });
+  });
+
+  function broadcast(eventType, data) {
+    const msg = `event: ${eventType}\ndata: ${JSON.stringify(data)}\n\n`;
+    for (const client of sseClients) {
+      try { client.write(msg); } catch {}
+    }
+  }
+
+  // Background live data pump — only runs when clients connected
+  let pumpInterval = null;
+  let pumpTick = 0;
+
+  function startPump() {
+    if (pumpInterval) return;
+    pumpInterval = setInterval(async () => {
+      if (sseClients.size === 0) return;
+      pumpTick++;
+
+      // Every 15s: live trade prices
+      try {
+        getDb();
+        const trades = getOpenTrades();
+        if (trades.length) {
+          const symbols = [...new Set(trades.map(t => t.symbol))];
+          const quotes = {};
+          await Promise.allSettled(
+            symbols.map(async (sym) => {
+              try { const q = await getQuote(sym); quotes[sym] = q.price; } catch {}
+            })
+          );
+          const enriched = trades.map(t => {
+            const cp = quotes[t.symbol] || t.current_price || t.entry_price;
+            const pnl = t.type === 'CALL'
+              ? (cp - t.entry_price) * t.lot_size * t.quantity
+              : (t.entry_price - cp) * t.lot_size * t.quantity;
+            const pnlPct = t.entry_price ? ((cp - t.entry_price) / t.entry_price * 100) : 0;
+            return { id: t.id, symbol: t.symbol, type: t.type, entry_price: t.entry_price, current_price: cp, stop_loss: t.stop_loss, target1: t.target1, target2: t.target2, t1_hit: t.t1_hit, t2_hit: t.t2_hit, quantity: t.quantity, capital_used: t.capital_used, live_pnl: pnl, live_pnl_pct: pnlPct };
+          });
+          broadcast('trades', enriched);
+        }
+
+        // Portfolio update alongside
+        const portfolio = getPortfolioSummary();
+        broadcast('portfolio', portfolio);
+      } catch {}
+
+      // Every 60s: index prices
+      if (pumpTick % 4 === 0) {
+        try {
+          const idx = await checkIndexHealth();
+          broadcast('indices', idx);
+        } catch {}
+      }
+
+      // Every 2min: live news
+      if (pumpTick % 8 === 0) {
+        try {
+          const articles = await fetchAllNews();
+          const scored = articles.slice(0, 20).map(a => ({
+            title: a.title, link: a.link, source: a.source,
+            pubDate: a.pubDate, score: scoreSentiment(a),
+          }));
+          broadcast('news', scored);
+        } catch {}
+      }
+
+      // Every 30s: agent activity
+      if (pumpTick % 2 === 0) {
+        try {
+          const db = getDb();
+          const logs = db.prepare('SELECT * FROM agent_logs ORDER BY created_at DESC LIMIT 10').all();
+          const signals = db.prepare('SELECT * FROM agent_signals WHERE consumed = 0 ORDER BY created_at DESC LIMIT 5').all();
+          const orch = getOrchestrator();
+          broadcast('agents', { logs, signals, running: orch?.isRunning() || false });
+        } catch {}
+      }
+    }, 15_000); // 15-second base tick
+  }
+
   // Start server
-  app.listen(port, () => {
+  const server = app.listen(port, () => {
     logger.info(`[dashboard] Running at http://localhost:${port}`);
+    startPump();
   });
 
   return app;
