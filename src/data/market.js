@@ -8,11 +8,12 @@ const yahooFinance = new YahooFinance({ suppressNotices: ['yahooSurvey'] });
 // ---------------------------------------------------------------------------
 const cache = new Map();
 
-function cacheGet(key) {
+function cacheGet(key, ttlMinutes) {
   const entry = cache.get(key);
   if (!entry) return null;
+  const ttl = ttlMinutes ?? DATA.CACHE_TTL_MINUTES;
   const ageMinutes = (Date.now() - entry.ts) / 60000;
-  if (ageMinutes > DATA.CACHE_TTL_MINUTES) {
+  if (ageMinutes > ttl) {
     cache.delete(key);
     return null;
   }
@@ -110,6 +111,55 @@ export async function getHistorical(symbol, days = 90) {
 
   cacheSet(cKey, bars);
   return bars;
+}
+
+/**
+ * Fetch intraday OHLCV data at specified interval.
+ * @param {string} symbol - NSE stock symbol
+ * @param {string} interval - '5m' | '15m' | '1h'
+ * @param {string} range - '1d' | '5d' | '1mo'
+ * @returns {Promise<Array>} Array of { date, open, high, low, close, volume }
+ */
+export async function getIntradayData(symbol, interval = '15m', range = '5d') {
+  const cKey = `intra:${symbol}:${interval}:${range}`;
+  const ttl = interval === '1h' ? 10 : 2; // 2 min for 5m/15m, 10 min for 1h
+  const cached = cacheGet(cKey, ttl);
+  if (cached) return cached;
+
+  const ys = ySymbol(symbol);
+  const result = await yahooFinance.chart(ys, {
+    interval,
+    range,
+  });
+
+  const bars = (result.quotes || []).map(q => ({
+    date:   q.date,
+    open:   q.open,
+    high:   q.high,
+    low:    q.low,
+    close:  q.close,
+    volume: q.volume,
+  }));
+
+  cacheSet(cKey, bars);
+  return bars;
+}
+
+/**
+ * Fetch intraday data for multiple symbols in parallel.
+ */
+export async function getBatchIntradayData(symbols, interval = '15m', range = '5d') {
+  const results = await Promise.allSettled(
+    symbols.map(s => getIntradayData(s, interval, range))
+  );
+
+  const output = {};
+  symbols.forEach((sym, i) => {
+    if (results[i].status === 'fulfilled') {
+      output[sym] = results[i].value;
+    }
+  });
+  return output;
 }
 
 /**
