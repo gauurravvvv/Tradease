@@ -751,6 +751,9 @@ function soundAlert() { playTone(880, 0.08); setTimeout(()=>playTone(880, 0.08),
 
 // ── Collapsible Sections ──
 function toggleSection(el) {
+  // Don't toggle when clicking buttons, selects, or inputs inside section-actions
+  const evt = window.event;
+  if (evt && evt.target.closest('.section-actions') && (evt.target.closest('button') || evt.target.closest('select') || evt.target.closest('input'))) return;
   const content = el.closest('.section').querySelector('.section-content');
   const chevron = el.querySelector('.chevron');
   if(content) content.classList.toggle('collapsed');
