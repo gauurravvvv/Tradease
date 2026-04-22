@@ -1,6 +1,7 @@
 import { FNO_STOCKS } from '../data/fno-stocks.js';
 import { getMultipleQuotes, getBatchHistorical } from '../data/market.js';
 import { analyzeTechnicals } from './technicals.js';
+import { batchConfluence } from './confluence.js';
 import { fetchAllNews } from '../data/news.js';
 import { getSectorStrength } from './sectors.js';
 import { getFiiDiiData } from '../data/fii-dii.js';
@@ -86,9 +87,35 @@ export async function screenStocks() {
     });
   }
 
-  // Sort by score descending, return top 15
+  // Sort by score descending
   scored.sort((a, b) => b.score - a.score);
-  return scored.slice(0, 15);
+
+  // Multi-timeframe confluence for top 30 candidates
+  const top30 = scored.slice(0, 30);
+  try {
+    const candidates = top30
+      .filter(s => s.recommendation === 'CALL' || s.recommendation === 'PUT')
+      .map(s => ({ symbol: s.symbol, direction: s.recommendation }));
+
+    if (candidates.length > 0) {
+      const confluenceMap = await batchConfluence(candidates);
+      for (const stock of top30) {
+        const conf = confluenceMap[stock.symbol];
+        if (conf) {
+          stock.confluence = conf.score;
+          stock.confluenceBreakdown = conf.breakdown;
+          // Add confluence weight (10% of total)
+          stock.score = Math.round(Math.min(100, stock.score * 0.9 + conf.score * 0.1) * 100) / 100;
+        }
+      }
+    }
+  } catch {
+    // Confluence unavailable — proceed with base scores
+  }
+
+  // Re-rank and return top 15
+  top30.sort((a, b) => b.score - a.score);
+  return top30.slice(0, 15);
 }
 
 /**

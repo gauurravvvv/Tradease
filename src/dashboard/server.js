@@ -653,6 +653,18 @@ export function startDashboard(port = 3777) {
     }
   });
 
+  // Backtest results
+  app.get('/api/backtest/latest', async (req, res) => {
+    try {
+      const { loadLatestBacktest, listBacktests } = await import('../backtesting/report.js');
+      const latest = loadLatestBacktest();
+      const all = listBacktests();
+      res.json({ latest, history: all });
+    } catch {
+      res.json({ latest: null, history: [] });
+    }
+  });
+
   // Recommended trades with pre-computed entry/SL/targets
   app.get('/api/recommendations', async (req, res) => {
     try {

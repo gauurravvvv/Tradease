@@ -5,6 +5,7 @@ import { calculateStopLoss, calculateTargets, calculatePositionSize, validateTra
 import { getQuote, getHistorical } from '../data/market.js';
 import { computeATR } from '../analysis/technicals.js';
 import { screenStocks } from '../analysis/screener.js';
+import { computeConfluence } from '../analysis/confluence.js';
 import { notifyTradeEntry } from '../utils/notify.js';
 import { logger } from '../utils/logger.js';
 
@@ -84,9 +85,27 @@ export class TradeStrategist extends BaseAgent {
       // Volume filter
       if (volumeRatio < MIN_VOLUME_RATIO) continue;
 
+      // ── Confluence gate ──
+      let confluenceScore = stock.confluence ?? 50;
+      try {
+        if (confluenceScore === 50) {
+          const conf = await computeConfluence(stock.symbol, rec);
+          confluenceScore = conf.score;
+        }
+      } catch { /* proceed without confluence */ }
+
+      // Skip if confluence too low (signals disagree across timeframes)
+      if (confluenceScore < 40) {
+        this.log('skip_confluence', stock.symbol, `confluence=${confluenceScore} too low`);
+        continue;
+      }
+
+      // High confluence lowers auto-entry threshold
+      const effectiveThreshold = confluenceScore >= 70 ? 65 : SCORE_AUTO_ENTER;
+
       // ── High-confidence: rule-based auto-enter ──
-      if (score >= SCORE_AUTO_ENTER) {
-        const result = await this._enterPosition(stock, rec, score, hasNews, 'rule');
+      if (score >= effectiveThreshold) {
+        const result = await this._enterPosition(stock, rec, score, hasNews, `rule|conf:${confluenceScore}`);
         if (result) {
           entered++;
           if (hasNews) consumedIds.push(newsMap[stock.symbol].id);

@@ -250,6 +250,61 @@ program
     }
   });
 
+// ─── backtest ────────────────────────────────────────────────────────────────
+program
+  .command('backtest')
+  .description('Run backtest on historical data')
+  .option('-s, --strategy <name>', 'Strategy: screener, momentum, meanreversion', 'screener')
+  .option('-d, --days <number>', 'Lookback days', '90')
+  .option('--symbols <list>', 'Comma-separated symbols (default: top 10 F&O)')
+  .option('--start <date>', 'Start date (YYYY-MM-DD)')
+  .option('--end <date>', 'End date (YYYY-MM-DD)')
+  .action(async (opts) => {
+    try {
+      getDb();
+      const { runBacktest } = await import('./backtesting/engine.js');
+      const { saveBacktestResult } = await import('./backtesting/report.js');
+      const { FNO_STOCKS } = await import('./data/fno-stocks.js');
+
+      const days = parseInt(opts.days, 10);
+      const end = opts.end || new Date().toISOString().slice(0, 10);
+      const start = opts.start || new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+      const symbols = opts.symbols
+        ? opts.symbols.split(',').map(s => s.trim().toUpperCase())
+        : FNO_STOCKS.slice(0, 10).map(s => s.symbol);
+
+      console.log(chalk.cyan(`\n  Backtesting ${opts.strategy} strategy...`));
+      console.log(chalk.gray(`  Symbols: ${symbols.join(', ')}`));
+      console.log(chalk.gray(`  Period: ${start} → ${end}\n`));
+
+      const result = await runBacktest({
+        strategy: opts.strategy,
+        symbols,
+        startDate: start,
+        endDate: end,
+      });
+
+      const filepath = saveBacktestResult(result);
+      const m = result.metrics;
+
+      console.log(chalk.bold.white('\n  ═══ Backtest Results ═══\n'));
+      console.log(`  Trades:        ${m.totalTrades}`);
+      console.log(`  Win Rate:      ${chalk[m.winRate >= 50 ? 'green' : 'red'](m.winRate + '%')}`);
+      console.log(`  Total P&L:     ${chalk[m.totalPnl >= 0 ? 'green' : 'red'](formatCurrency(m.totalPnl))}`);
+      console.log(`  Return:        ${chalk[m.totalReturnPct >= 0 ? 'green' : 'red'](m.totalReturnPct + '%')}`);
+      console.log(`  Profit Factor: ${m.profitFactor}`);
+      console.log(`  Max Drawdown:  ${chalk.red(m.maxDrawdown + '%')}`);
+      console.log(`  Sharpe Ratio:  ${m.sharpeRatio}`);
+      console.log(`  Best Trade:    ${chalk.green(formatCurrency(m.bestTrade))}`);
+      console.log(`  Worst Trade:   ${chalk.red(formatCurrency(m.worstTrade))}`);
+      console.log(`  Avg Hold:      ${m.avgHoldingDays} days`);
+      console.log(chalk.gray(`\n  Saved: ${filepath}\n`));
+    } catch (err) {
+      console.error(chalk.red(`Backtest failed: ${err.message}`));
+      process.exit(1);
+    }
+  });
+
 // ─── daemon ─────────────────────────────────────────────────────────────────
 program
   .command('daemon')
