@@ -60,7 +60,28 @@ export async function runBacktest(config) {
   // Build unified timeline
   const start = new Date(startDate);
   const end = new Date(endDate);
+
+  if (!Object.keys(allData).length) {
+    logger.warn('[backtest] No valid historical data for any symbol');
+    return {
+      trades: [],
+      metrics: generateReport([], [], startingCapital),
+      equityCurve: [{ date: startDate, capital: startingCapital }],
+      config,
+    };
+  }
+
   const timeline = buildTimeline(allData, start, end);
+
+  if (!timeline.length) {
+    logger.warn('[backtest] Empty timeline — no data in date range');
+    return {
+      trades: [],
+      metrics: generateReport([], [], startingCapital),
+      equityCurve: [{ date: startDate, capital: startingCapital }],
+      config,
+    };
+  }
 
   // Simulation state
   let capital = startingCapital;

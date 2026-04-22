@@ -26,7 +26,7 @@ const POSITIVE_KEYWORDS = [
  * Returns number: negative = bearish, positive = bullish.
  */
 export function scoreSentiment(newsItem) {
-  const text = `${newsItem.title} ${newsItem.snippet}`;
+  const text = `${newsItem.title || ''} ${newsItem.snippet || ''}`;
   let score = 0;
 
   for (const { pattern, weight } of NEGATIVE_KEYWORDS) {

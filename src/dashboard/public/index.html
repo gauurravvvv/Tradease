@@ -1357,9 +1357,14 @@ async function loadBacktest() {
       return;
     }
 
-    const m = data.latest.metrics;
+    const m = data.latest.metrics || {};
     const cfg = data.latest.config || {};
-    badge.textContent = `${cfg.strategy || 'screener'} | ${m.totalTrades} trades`;
+    badge.textContent = `${cfg.strategy || 'screener'} | ${m.totalTrades || 0} trades`;
+
+    if (!m.totalTrades) {
+      el.innerHTML = `<div class="empty">Last backtest (${cfg.strategy || 'screener'}) produced 0 trades — no signals matched in ${cfg.startDate || '--'} → ${cfg.endDate || '--'}. Try a different strategy or longer period.</div>`;
+      return;
+    }
 
     // Metrics cards
     const metricCard = (label, value, color) =>
@@ -1425,7 +1430,12 @@ async function runBacktest() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ strategy, days: 90 }),
     });
-    toast(`Backtest complete: ${result.metrics.totalTrades} trades, ${result.metrics.winRate}% win rate`, 'success');
+    const m = result.metrics || {};
+    if ((m.totalTrades || 0) === 0) {
+      toast('Backtest complete: 0 trades — no signals matched in this period', 'info', 5000);
+    } else {
+      toast(`Backtest complete: ${m.totalTrades} trades, ${m.winRate}% win rate`, 'success');
+    }
     loadBacktest();
   } catch (e) {
     toast('Backtest failed: ' + e.message, 'error', 5000);

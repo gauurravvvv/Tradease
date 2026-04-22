@@ -16,7 +16,7 @@ const MAX_RESULTS = 20;
  * @returns {Object} BacktestMetrics
  */
 export function generateReport(trades, equityCurve, startingCapital) {
-  if (!trades.length) {
+  if (!trades || !trades.length) {
     return emptyMetrics(startingCapital);
   }
 
@@ -86,8 +86,8 @@ export function generateReport(trades, equityCurve, startingCapital) {
     maxDrawdownAmount: Math.round(maxDrawdownAmount),
     sharpeRatio,
     avgHoldingDays,
-    bestTrade: Math.round(Math.max(...trades.map(t => t.pnl))),
-    worstTrade: Math.round(Math.min(...trades.map(t => t.pnl))),
+    bestTrade: trades.length ? Math.round(Math.max(...trades.map(t => t.pnl))) : 0,
+    worstTrade: trades.length ? Math.round(Math.min(...trades.map(t => t.pnl))) : 0,
     consecutiveWins: maxWinStreak,
     consecutiveLosses: maxLossStreak,
     recoveryFactor: maxDrawdown > 0

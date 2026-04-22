@@ -51,7 +51,7 @@ export function createJournalEntry(trade) {
     : '0';
 
   const autoNotes = [
-    `${trade.type} trade on ${trade.symbol}`,
+    `${trade.type || 'Unknown'} trade on ${trade.symbol}`,
     `Entry: ₹${trade.entry_price} → Exit: ₹${trade.exit_price || 'open'}`,
     `P&L: ₹${(trade.pnl || 0).toFixed(0)} (${pnlPct}%)`,
     `Status: ${trade.status}`,
@@ -63,7 +63,7 @@ export function createJournalEntry(trade) {
 
   const tags = [
     trade.status === 'STOPPED' ? 'stop-loss' : trade.pnl > 0 ? 'winner' : 'loser',
-    trade.type.toLowerCase(),
+    (trade.type || 'unknown').toLowerCase(),
     trade.t1_hit ? 'target-hit' : 'no-target',
     holdingTime && holdingTime < 2 ? 'scalp' : holdingTime && holdingTime > 24 ? 'swing' : 'intraday',
   ].join(',');

@@ -123,6 +123,8 @@ function computeMomentumMultiplier(momentum, type) {
  * @returns {number|null} Trailing stop price, or null if not yet triggered
  */
 export function calculateTrailingStop(entryPrice, currentPrice, atr, type, momentum = null) {
+  if (!entryPrice) return null;
+
   const profitPct = type === 'CALL'
     ? ((currentPrice - entryPrice) / entryPrice) * 100
     : ((entryPrice - currentPrice) / entryPrice) * 100;
@@ -206,8 +208,8 @@ export function shouldExit(trade, currentPrice, atr) {
     return { shouldExit: true, reason: `Stop-loss hit at ₹${stopLoss}`, action: 'FULL_EXIT' };
   }
 
-  // Check trailing stop
-  const trailingStop = calculateTrailingStop(entryPrice, currentPrice, atr, type);
+  // Check trailing stop (skip if no ATR data)
+  const trailingStop = atr ? calculateTrailingStop(entryPrice, currentPrice, atr, type) : null;
   if (trailingStop != null) {
     if (type === 'CALL' && currentPrice <= trailingStop) {
       return { shouldExit: true, reason: `Trailing stop hit at ₹${trailingStop}`, action: 'FULL_EXIT' };
@@ -236,9 +238,11 @@ export function shouldExit(trade, currentPrice, atr) {
   }
 
   // Check max loss breached (percentage-based safety net)
-  const pnlPct = type === 'CALL'
-    ? ((currentPrice - entryPrice) / entryPrice) * 100
-    : ((entryPrice - currentPrice) / entryPrice) * 100;
+  const pnlPct = entryPrice
+    ? (type === 'CALL'
+      ? ((currentPrice - entryPrice) / entryPrice) * 100
+      : ((entryPrice - currentPrice) / entryPrice) * 100)
+    : 0;
 
   if (pnlPct <= -(MAX_LOSS_PER_TRADE * 100)) {
     return {

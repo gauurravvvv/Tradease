@@ -1,290 +1,285 @@
 # Tradease
 
-AI-powered Indian F&O (Futures & Options) paper trading system. Uses Claude as the analysis engine, Yahoo Finance for market data, and technical indicators to generate, execute, and monitor trade ideas — all from the terminal.
+AI-powered autonomous Indian F&O (Futures & Options) paper trading system. Three autonomous agents collaborate to scan markets, enter trades, monitor positions, and exit — all without human intervention. Built with Claude AI, Yahoo Finance, and real-time technical analysis.
 
-**Paper trading only.** No real money. No broker integration.
+**Paper trading only.** No real money. No broker integration. Start the daemon and walk away.
 
-## Features
+---
 
-- **Multi-factor stock screener** — volume, technicals, momentum, proximity, news, sector rotation, FII/DII flows, global cues, VIX
-- **AI-powered analysis** — Claude analyzes screened stocks and produces trade recommendations with entry/SL/targets
-- **Paper trading engine** — virtual ₹2,00,000 capital, max 3 concurrent positions, ATR-based stop-losses
-- **24x7 daemon mode** — automated pre-market scan, trade execution, position monitoring, wind-down, and daily summaries
-- **Position monitoring** — real-time price tracking, trailing stops, partial profit booking (T1/T2), emergency exit on index crash
-- **Desktop notifications** — trade entries, exits, stop-losses, target hits, index crashes, daily summaries
-- **Persistent logging** — daily rotating log files in `data/logs/`
-- **Research mode** — quick or deep analysis on any F&O stock with full market context
+## Highlights
+
+- **3 Autonomous AI Agents** — Trade Strategist (entries), Position Guardian (exits), News Sentinel (news-driven signals)
+- **Multi-factor screener** — 9-factor scoring across 180+ F&O stocks (volume, technicals, momentum, news, sectors, FII/DII, global cues, VIX)
+- **Multi-timeframe confluence** — confirms signals across 5m, 15m, 1h, daily timeframes before entry
+- **Adaptive trailing stops** — momentum-aware (RSI + MACD) with exhaustion detection
+- **Real-time web dashboard** — live prices via SSE, candlestick charts, equity curve, risk panel, agent monitoring
+- **Backtesting engine** — 3 strategies (screener, momentum, mean-reversion) with Sharpe ratio, drawdown, profit factor
+- **Trade journal** — auto-generated entries from closed trades with tags, ratings, and AI review slots
+- **Telegram alerts** — instant notifications for entries, exits, stop-losses, target hits, index crashes
+- **Full CLI** — 10+ commands for scanning, research, portfolio management, and market status
+
+---
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    DAEMON (24x7)                        │
+├──────────────┬──────────────┬───────────────────────────┤
+│  Scheduler   │  Listeners   │   Agent Orchestrator      │
+│  (7 cron     │  (price,     │                           │
+│   jobs)      │   news,      │  ┌───────────────────┐    │
+│              │   index)     │  │  News Sentinel     │    │
+│              │              │  │  (RSS → signals)   │    │
+│              │              │  └───────┬───────────┘    │
+│              │              │          │ bullish_news    │
+│              │              │          │ bearish_news    │
+│              │              │          │ urgent_exit     │
+│              │              │          ▼                 │
+│              │              │  ┌───────────────────┐    │
+│              │              │  │ Trade Strategist   │    │
+│              │              │  │ (screen→enter)     │    │
+│              │              │  └───────────────────┘    │
+│              │              │  ┌───────────────────┐    │
+│              │              │  │ Position Guardian  │    │
+│              │              │  │ (monitor→exit)     │    │
+│              │              │  └───────────────────┘    │
+├──────────────┴──────────────┴───────────────────────────┤
+│  SQLite DB  │  Yahoo Finance  │  RSS Feeds  │  Claude   │
+└─────────────┴─────────────────┴─────────────┴───────────┘
+```
+
+### Agent Signal Flow
+
+| Producer | Signal | Consumer | Action |
+|----------|--------|----------|--------|
+| News Sentinel | `bullish_news` | Trade Strategist | Boost borderline candidates, Claude confirmation |
+| News Sentinel | `bearish_news` | Position Guardian | Tighten stops, evaluate exit |
+| News Sentinel | `urgent_exit` | Position Guardian | Immediate exit on losing positions, Claude decision on profitable |
+
+---
 
 ## Prerequisites
 
 - **Node.js 18+** (20+ recommended)
-- **Claude Code CLI** — installed and authenticated ([claude.ai/claude-code](https://claude.ai/claude-code))
+- **Claude Code CLI** — installed and authenticated
 - **macOS/Linux** (desktop notifications via `node-notifier`)
 
 ## Installation
 
 ```bash
-# Clone the repo
-git clone <your-repo-url> Tradease
+git clone https://github.com/gauravgoel11/Tradease.git
 cd Tradease
-
-# Install dependencies
 npm install
 
-# Link CLI globally (optional)
+# Optional: link CLI globally
 npm link
 ```
-
-After `npm link`, you can use `tradease` from anywhere. Without it, use `node src/index.js` instead.
 
 ## Quick Start
 
 ```bash
-# Run a pre-market scan
-tradease scan
+# Just start everything (daemon + dashboard + agents)
+tradease daemon
 
-# Quick research on a stock
-tradease research RELIANCE
-
-# Deep research with options + 90-day history
-tradease research deep RELIANCE
-
-# News digest — top stocks + sentiment
-tradease news
-
-# Launch web dashboard
+# Dashboard at http://localhost:3777
 tradease dashboard
 
-# Check market pulse
-tradease pulse
-
-# Start the daemon (runs everything on schedule)
-tradease daemon
+# Or explore individual commands
+tradease scan              # Pre-market scan
+tradease research RELIANCE # Quick analysis
+tradease pulse             # Market status
+tradease news              # News + sentiment
 ```
+
+---
 
 ## Commands
 
-### `tradease scan`
+| Command | Description |
+|---------|-------------|
+| `tradease scan` | Pre-market screening + AI analysis, interactive trade execution |
+| `tradease research [quick\|deep] <SYMBOL>` | Stock analysis with technicals, news, entry/SL/targets |
+| `tradease news` | Top 15 stocks consolidated news + sentiment scores |
+| `tradease dashboard` | Web dashboard at `localhost:3777` |
+| `tradease portfolio` | Portfolio overview + unrealized P&L |
+| `tradease trades` | Active trades with live P&L |
+| `tradease exit <SYMBOL>` | Manual exit position |
+| `tradease history` | Closed trades + win rate + performance stats |
+| `tradease status` / `pulse` | Full market status (indices, global, FII/DII, sectors, VIX) |
+| `tradease daemon` | Start 24x7 daemon with all schedulers + agents |
 
-Run pre-market screening and AI analysis. Displays a morning brief with top trade ideas.
+---
 
-```bash
-tradease scan                  # Interactive — prompts for action
-tradease scan --no-interactive # Non-interactive (daemon mode)
-tradease scan -n 20            # Screen top 20 stocks (default: 15)
-```
+## Web Dashboard
 
-**Interactive actions after scan:**
-- `E` — Execute all recommended trades
-- `1-N` — Execute a specific trade
-- `D1-DN` — Deep research a specific stock
-- `S` — Skip (no trades)
+Dark-themed, real-time dashboard with SSE live updates.
 
-### `tradease research <symbol>`
+**Sections:**
+- **Portfolio** — capital, available, unrealized P&L, open positions count
+- **Market Pulse** — Nifty, BankNifty, VIX, market session status
+- **Global Markets** — S&P 500, Nasdaq, Dow, Nikkei, Hang Seng, Crude, Gold, DXY
+- **FII/DII Flows** — buy/sell signals with visual indicators
+- **Sector Rotation** — sector strength with trend arrows
+- **Open Trades** — live P&L bars, stop-loss, targets, one-click exit
+- **Recommendations** — screened picks with pre-computed entry/SL/targets, one-click trade
+- **Candlestick Charts** — intraday 5-minute charts (LightweightCharts)
+- **Equity Curve** — portfolio value over time + daily P&L histogram
+- **Risk Dashboard** — capital allocation, sector exposure, drawdown, worst-case loss
+- **Backtesting** — run strategies from UI, view metrics (Sharpe, drawdown, win rate, profit factor)
+- **Trade Journal** — auto-generated entries, filter by tag/period, rate trades
+- **Agent Monitor** — agent status, recent logs, pending signals, start/stop controls
+- **News Feed** — general finance news with sentiment scores
+- **Telegram Setup** — configure bot token + chat ID from UI
+- **Agent Config** — tune max positions, ATR multiplier, trailing stops, risk:reward from UI
 
-Analyze a single stock. Two modes:
+---
 
-```bash
-# Quick analysis — current price, technicals, news
-tradease research RELIANCE
-tradease research quick RELIANCE
+## Autonomous Agents
 
-# Deep analysis — 90-day history, options chain, full context
-tradease research deep RELIANCE
-tradease research RELIANCE --deep
-```
+### Trade Strategist
+- Runs every 10 minutes during market hours (9:30 AM - 2:30 PM)
+- Screens stocks, filters by RSI/volume/confluence
+- Auto-enters trades scoring 70+ (65+ with high confluence)
+- Borderline candidates (60-69) need news signal + Claude confirmation
+- Max 1 entry per tick
 
-Deep mode fetches FII/DII flows, global cues, sector data, and passes everything to Claude for comprehensive analysis.
+### Position Guardian
+- Runs every 2 minutes during market hours (9:15 AM - 3:20 PM)
+- Checks stop-loss, trailing stop, T1/T2 targets for every position
+- Adaptive trailing stops using RSI + MACD momentum
+- Processes `urgent_exit` / `bearish_news` signals from News Sentinel
+- Index crash detection (-1.5% Nifty) → emergency exit ALL
+- Wind-down at 3:15 PM — close everything
 
-### `tradease news`
+### News Sentinel
+- Runs every 5 minutes during market hours
+- Monitors RSS feeds for open positions + strategist watchlist
+- Keyword-based sentiment scoring (strong neg: -2, mild neg: -1, positive: +1, strong positive: +2)
+- Writes signals: `bullish_news`, `bearish_news`, `urgent_exit`
 
-Consolidated news digest with sentiment analysis for top screened stocks.
+---
 
-```bash
-tradease news              # Top 15 stocks (default)
-tradease news -n 10        # Top 10 stocks
-tradease news --detail     # Show all headlines per stock
-```
+## Backtesting
 
-Displays a table with stock, sector, news count, sentiment score, and sentiment label (BULLISH/BEARISH/NEUTRAL). Key headlines shown for high-impact sentiment movers.
+Three built-in strategies:
 
-### `tradease portfolio`
+| Strategy | Logic |
+|----------|-------|
+| **Screener** | Full multi-factor scoring (same as live screener) |
+| **Momentum** | RSI oversold + MACD bullish crossover + volume spike |
+| **Mean Reversion** | RSI extreme + Bollinger Band touch + volume confirmation |
 
-Show portfolio overview — total capital, available capital, unrealized P&L, open positions.
+Run from dashboard UI or CLI. Metrics: total P&L, win rate, Sharpe ratio, max drawdown, profit factor, best/worst trade, consecutive wins/losses, recovery factor.
 
-### `tradease trades`
+---
 
-Show active trades with live P&L, stop-loss levels, and target status.
+## Trading Rules
 
-### `tradease history`
+| Rule | Value |
+|------|-------|
+| Virtual capital | ₹2,00,000 |
+| Max concurrent positions | 3 |
+| Max capital per position | 20% |
+| Max loss per trade | 5% of capital |
+| Stop-loss | 1.5x ATR |
+| Trailing stop trigger | After 1% profit |
+| Trailing stop distance | 0.5x ATR (adaptive with momentum) |
+| T1 partial exit | 50% at 2:1 R:R |
+| T2 partial exit | 25% at 3:1 R:R |
+| Runner | 25% rides with trailing SL |
+| Index crash exit | -1.5% Nifty → exit ALL |
+| No new entries after | 3:00 PM IST |
+| Wind-down exit | 3:15 PM IST |
 
-Show closed trades with win rate and performance stats.
-
-```bash
-tradease history            # Last 30 days (default)
-tradease history --days 7   # Last 7 days
-tradease history --days 90  # Last 90 days
-```
-
-### `tradease exit <symbol>`
-
-Manually exit an open position.
-
-```bash
-tradease exit RELIANCE
-tradease exit RELIANCE --reason "Sector rotation out"
-```
-
-### `tradease status` (alias: `tradease pulse`)
-
-Full market status — indices, global cues, FII/DII flows, sector rotation, VIX.
-
-Shows:
-- Market session status (OPEN / PRE-MARKET / CLOSED)
-- Nifty + BankNifty levels with severity
-- VIX level and change
-- Global markets table (S&P, Nasdaq, Dow, Nikkei, Hang Seng, Crude, Gold, DXY, US 10Y)
-- Global mood sentiment bar
-- FII/DII flows with buy/sell signals
-- Sector rotation table with trend arrows
-
-### `tradease dashboard`
-
-Launch a local web dashboard at `http://localhost:3777`. Dark-themed, auto-refreshes every 60 seconds.
-
-```bash
-tradease dashboard            # Default port 3777
-tradease dashboard -p 8080    # Custom port
-```
-
-Shows:
-- Portfolio summary cards (capital, available, unrealized P&L, positions)
-- Market pulse (Nifty, BankNifty, market session status)
-- Global markets table with mood sentiment bar
-- FII/DII flows with buy/sell signals
-- Sector rotation with visual bars
-- Open trades table with live P&L + visual bars
-- Performance stats (30d win rate, avg win/loss, best/worst)
-- News sentiment cards for open positions with headlines
-- Recent trade history with results
-
-### `tradease daemon`
-
-Start the 24x7 daemon. Runs all tasks on schedule:
-
-| Schedule | Task | Time (IST) |
-|---|---|---|
-| Pre-market scan | Screen stocks + AI analysis | 8:30 AM Mon-Fri |
-| Market open check | Index health check | 9:15 AM Mon-Fri |
-| Trade execution | Auto-execute high-confidence trades | 9:30 AM Mon-Fri |
-| Market pulse | Index monitoring (every 30 min) | 9:00 AM – 2:59 PM Mon-Fri |
-| Position monitor | Price/SL/target checks (every minute) | 9:00 AM – 2:59 PM Mon-Fri |
-| Wind-down | Close all positions | 3:15 PM Mon-Fri |
-| Post-market | Save daily summary + stats | 3:45 PM Mon-Fri |
-
-```bash
-tradease daemon    # Start daemon
-# or
-npm start             # Same thing
-```
-
-Press `Ctrl+C` to stop gracefully.
-
-## Configuration
-
-All settings in `src/config/settings.js`:
-
-### Trading Rules
-
-| Setting | Default | Description |
-|---|---|---|
-| `VIRTUAL_CAPITAL` | ₹2,00,000 | Total paper trading capital |
-| `MAX_POSITIONS` | 3 | Max concurrent open trades |
-| `MAX_CAPITAL_PER_POSITION` | 20% | Max capital per single trade |
-| `MAX_LOSS_PER_TRADE` | 5% | Hard max loss per trade |
-| `ATR_STOP_MULTIPLIER` | 1.5x | Stop-loss = 1.5x ATR |
-| `TRAILING_TRIGGER_PCT` | 1% | Trailing stop activates after 1% profit |
-| `MIN_CONFIDENCE` | 70 | Minimum AI confidence to show trade |
-| `NO_NEW_ENTRY_AFTER` | 3:00 PM | No new trades after this time |
-| `EXIT_ALL_BY` | 3:15 PM | Wind-down exit time |
-
-### Profit Booking
-
-| Target | % of Position | Risk:Reward |
-|---|---|---|
-| T1 | 50% exit | 2:1 |
-| T2 | 25% exit | 3:1 |
-| Runner | 25% rides with trailing SL | — |
-
-### Safety
-
-- **Index crash threshold**: -1.5% Nifty drop → emergency exit ALL positions
-- **Trailing stop**: moves to breakeven after T1 hit, then trails at 0.5x ATR
-- **News monitoring**: checks sentiment every 5 minutes for open positions
+---
 
 ## Project Structure
 
 ```
 Tradease/
 ├── src/
-│   ├── index.js              # CLI entry point (Commander.js)
+│   ├── index.js                # CLI entry + daemon orchestration
+│   ├── agents/
+│   │   ├── base.js             # BaseAgent class (Claude calls, signals, logging)
+│   │   ├── orchestrator.js     # Agent lifecycle management
+│   │   ├── trade-strategist.js # Entry agent (screener → trade)
+│   │   ├── position-guardian.js# Exit agent (monitor → exit)
+│   │   └── news-sentinel.js    # News agent (RSS → signals)
 │   ├── analysis/
-│   │   ├── claude.js          # Claude AI integration
-│   │   ├── screener.js        # Multi-factor stock screener
-│   │   ├── sectors.js         # Sector rotation analysis
-│   │   └── technicals.js      # Technical indicators (RSI, MACD, etc.)
+│   │   ├── claude.js           # Claude AI integration
+│   │   ├── confluence.js       # Multi-timeframe confluence scoring
+│   │   ├── screener.js         # 9-factor stock screener
+│   │   ├── sectors.js          # Sector rotation analysis
+│   │   └── technicals.js       # Technical indicators (RSI, MACD, BB, ATR)
+│   ├── backtesting/
+│   │   ├── engine.js           # Bar-by-bar simulation engine
+│   │   ├── strategies.js       # Screener, momentum, mean-reversion
+│   │   └── report.js           # Metrics generation + result storage
 │   ├── cli/
-│   │   ├── display.js         # Terminal UI (tables, charts, briefs)
-│   │   ├── news.js            # News digest command
-│   │   ├── portfolio.js       # Portfolio/trades/history display
-│   │   ├── research.js        # Research command handler
-│   │   └── scan.js            # Scan command + trade execution
-│   ├── dashboard/
-│   │   ├── server.js          # Express API server
-│   │   └── public/
-│   │       └── index.html     # Web dashboard (dark theme)
+│   │   ├── display.js          # Terminal UI (tables, charts, briefs)
+│   │   ├── news.js             # News digest command
+│   │   ├── portfolio.js        # Portfolio/trades/history display
+│   │   ├── research.js         # Research command handler
+│   │   ├── scan.js             # Scan command + trade execution
+│   │   └── status.js           # Market status command
 │   ├── config/
-│   │   └── settings.js        # All configuration
+│   │   └── settings.js         # All configuration
+│   ├── dashboard/
+│   │   ├── server.js           # Express API (30+ endpoints) + SSE
+│   │   └── public/
+│   │       └── index.html      # Web dashboard (single-page, dark theme)
 │   ├── data/
-│   │   ├── fii-dii.js         # FII/DII flow data
-│   │   ├── fno-stocks.js      # F&O eligible stock list
-│   │   ├── global-cues.js     # Global market cues (US, Asia, Europe)
-│   │   ├── market.js          # Yahoo Finance quotes
-│   │   ├── news.js            # Google News RSS
-│   │   └── options.js         # Options chain, expiry, strikes
+│   │   ├── fii-dii.js          # FII/DII flow data
+│   │   ├── fno-stocks.js       # 180+ F&O eligible stocks (NSE)
+│   │   ├── global-cues.js      # Global market data
+│   │   ├── market.js           # Yahoo Finance quotes + historical
+│   │   ├── news.js             # Google News RSS with 5-min cache
+│   │   └── options.js          # Options chain, expiry, strikes
 │   ├── db/
-│   │   └── sqlite.js          # SQLite database (better-sqlite3)
+│   │   ├── sqlite.js           # SQLite database (better-sqlite3)
+│   │   └── migrations.js       # Schema migrations
 │   ├── listeners/
-│   │   ├── index-monitor.js   # Nifty/BankNifty health monitor
-│   │   ├── manager.js         # Listener orchestrator (tick loop)
-│   │   ├── news-monitor.js    # News sentiment monitor
-│   │   └── price.js           # Price/SL/target checker
+│   │   ├── index-monitor.js    # Nifty/BankNifty crash detection
+│   │   ├── manager.js          # Listener orchestrator
+│   │   ├── news-monitor.js     # Keyword-based sentiment scoring
+│   │   └── price.js            # Live price/SL/target checker
 │   ├── scheduler/
-│   │   └── cron.js            # Cron job scheduler
+│   │   └── cron.js             # 7 cron jobs for daemon
 │   ├── trading/
-│   │   ├── manager.js         # Trade entry/exit/partial/stop
-│   │   ├── portfolio.js       # Portfolio summary + daily P&L
-│   │   └── risk.js            # Position sizing, SL, targets, validation
+│   │   ├── journal.js          # Trade journal (auto-journaling)
+│   │   ├── manager.js          # Trade entry/exit/partial/stop
+│   │   ├── portfolio.js        # Portfolio summary + equity curve
+│   │   └── risk.js             # Position sizing, SL, targets, adaptive trailing
 │   └── utils/
-│       ├── logger.js          # Daily rotating file logger
-│       └── notify.js          # Desktop notifications
-├── tests/
-│   ├── risk.test.js           # Risk module tests (23 tests)
-│   ├── options.test.js        # Options module tests (13 tests)
-│   ├── screener.test.js       # Screener tests (17 tests)
-│   └── claude-parse.test.js   # AI response parsing tests (11 tests)
-├── data/
-│   ├── trades.db              # SQLite database (auto-created)
-│   └── logs/                  # Daily log files (auto-created)
+│       ├── logger.js           # Daily rotating file logger
+│       ├── notify.js           # Desktop notifications
+│       └── telegram.js         # Telegram Bot API integration
+├── tests/                      # Jest test suites
 ├── package.json
 ├── jest.config.js
 └── CLAUDE.md
 ```
 
-## Data Storage
+---
 
-- **Trades database**: `data/trades.db` (SQLite, auto-created on first run)
-- **Log files**: `data/logs/YYYY-MM-DD.log` (auto-rotated, cleaned after 30 days)
+## Tech Stack
+
+| Component | Technology |
+|-----------|-----------|
+| Runtime | Node.js 20+ (ES modules) |
+| AI Engine | Claude (via Claude Code CLI) |
+| Market Data | Yahoo Finance |
+| News | Google News RSS |
+| Database | SQLite (better-sqlite3) |
+| Web Server | Express 5 |
+| Charts | LightweightCharts (TradingView) |
+| Technical Analysis | technicalindicators |
+| Scheduling | node-cron |
+| CLI | Commander.js |
+| Notifications | node-notifier + Telegram Bot API |
+
+---
 
 ## Testing
 
@@ -292,33 +287,9 @@ Tradease/
 npm test
 ```
 
-Runs 64 tests across 4 test suites:
-- `risk.test.js` — position sizing, stop-loss, targets, trailing stop, validation
-- `options.test.js` — Black-Scholes premium, expiry dates, ATM strike
-- `screener.test.js` — scoring algorithm, recommendation derivation
-- `claude-parse.test.js` — JSON extraction, type normalization
+64 tests across 4 suites — risk calculations, options pricing, screener scoring, AI response parsing.
 
-## Notifications
-
-Desktop notifications fire on:
-- Trade entry/exit
-- Stop-loss triggered
-- Target T1/T2 hit
-- Index crash (with sound alert)
-- Scan complete
-- Daemon start/stop
-- Daily summary
-
-Critical alerts (index crash) play a sound. Requires macOS notification support.
-
-## How It Works
-
-1. **Screening** — scans ~180 F&O eligible NSE stocks through a 9-factor scoring model
-2. **AI Analysis** — top candidates sent to Claude with compressed market data + context
-3. **Execution** — trades entered with ATR-based stops, lot sizing, and capital checks
-4. **Monitoring** — daemon checks prices every minute, news every 5 minutes, index every 30 minutes
-5. **Exit logic** — partial exit at T1 (50%), T2 (25%), runner rides with trailing SL. Emergency exit on index crash (-1.5%).
-6. **Wind-down** — all positions closed by 3:15 PM IST, daily P&L saved
+---
 
 ## License
 
