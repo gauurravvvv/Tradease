@@ -64,19 +64,36 @@ async function fetchFeed(url) {
 }
 
 // ---------------------------------------------------------------------------
+// News cache — prevents score fluctuation on page refresh
+// ---------------------------------------------------------------------------
+let _newsCache = null;
+let _newsCacheTs = 0;
+const NEWS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+// ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
 /**
  * Fetch all configured RSS feeds in parallel.
  * Returns deduplicated, most-recent-first articles.
+ * Cached for 5 minutes to prevent sentiment score fluctuation.
  */
 export async function fetchAllNews() {
+  const now = Date.now();
+  if (_newsCache && (now - _newsCacheTs) < NEWS_CACHE_TTL) {
+    return _newsCache;
+  }
+
   const batches = await Promise.all(
     DATA.NEWS_FEEDS.map(url => fetchFeed(url))
   );
   const all = batches.flat();
-  return sortByRecency(deduplicate(all));
+  const result = sortByRecency(deduplicate(all));
+
+  _newsCache = result;
+  _newsCacheTs = now;
+  return result;
 }
 
 /**
