@@ -3,7 +3,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { getDb } from '../db/sqlite.js';
 import { getOpenTrades, getTradeHistory, enterTrade, exitTrade, partialExit } from '../trading/manager.js';
-import { getPortfolioSummary, getPerformanceStats } from '../trading/portfolio.js';
+import { getPortfolioSummary, getPerformanceStats, getEquityCurve } from '../trading/portfolio.js';
 import { calculateStopLoss, calculateTargets, calculatePositionSize, validateTrade } from '../trading/risk.js';
 import { checkIndexHealth } from '../listeners/index-monitor.js';
 import { getStockNews, fetchAllNews } from '../data/news.js';
@@ -13,6 +13,9 @@ import { getFiiDiiData } from '../data/fii-dii.js';
 import { getSectorStrength } from '../analysis/sectors.js';
 import { screenStocks } from '../analysis/screener.js';
 import { getQuote, getHistorical } from '../data/market.js';
+import YahooFinance from 'yahoo-finance2';
+import { DATA } from '../config/settings.js';
+import { FNO_STOCKS } from '../data/fno-stocks.js';
 import { analyzeTechnicals, computeATR } from '../analysis/technicals.js';
 import { logger } from '../utils/logger.js';
 import { getOrchestrator, setOrchestrator, AgentOrchestrator } from '../agents/orchestrator.js';
@@ -20,6 +23,8 @@ import { getOrchestrator, setOrchestrator, AgentOrchestrator } from '../agents/o
 // Cache for expensive operations
 const screenerCache = { data: null, ts: 0 };
 const SCREENER_TTL = 10 * 60 * 1000; // 10 minutes
+const chartCache = new Map(); // key: symbol, value: { data, ts }
+const CHART_TTL = 2 * 60 * 1000; // 2 minutes
 
 // ── Live data caches (shared across SSE clients) ──
 const liveCache = {
@@ -478,6 +483,171 @@ export function startDashboard(port = 3777) {
       screenerCache.ts = Date.now();
       logger.info(`[dashboard] Fresh scan via UI: ${picks.length} picks`);
       res.json(picks);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Intraday 5-min chart data
+  app.get('/api/chart/:symbol', async (req, res) => {
+    try {
+      const symbol = req.params.symbol.toUpperCase();
+      const now = Date.now();
+      const cached = chartCache.get(symbol);
+      if (cached && (now - cached.ts) < CHART_TTL) {
+        return res.json(cached.data);
+      }
+
+      const ySymbol = symbol === 'NIFTY' ? '^NSEI'
+        : symbol === 'BANKNIFTY' ? '^NSEBANK'
+        : `${symbol}${DATA.YAHOO_SUFFIX}`;
+
+      const yahooFinance = new YahooFinance({ suppressNotices: ['yahooSurvey'] });
+      const result = await yahooFinance.chart(ySymbol, {
+        period1: new Date(new Date().setHours(0, 0, 0, 0)),
+        interval: '5m',
+      });
+
+      const quotes = result.quotes || [];
+      const candles = quotes
+        .filter(q => q.open != null && q.close != null)
+        .map(q => ({
+          time: Math.floor(new Date(q.date).getTime() / 1000),
+          open: q.open,
+          high: q.high,
+          low: q.low,
+          close: q.close,
+        }));
+
+      const volume = quotes
+        .filter(q => q.volume != null)
+        .map(q => ({
+          time: Math.floor(new Date(q.date).getTime() / 1000),
+          value: q.volume,
+          color: q.close >= q.open ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)',
+        }));
+
+      const data = { symbol, candles, volume };
+      chartCache.set(symbol, { data, ts: now });
+      res.json(data);
+    } catch (err) {
+      res.status(500).json({ error: err.message, symbol: req.params.symbol, candles: [], volume: [] });
+    }
+  });
+
+  // Equity curve + daily P&L chart data
+  app.get('/api/equity-curve', (req, res) => {
+    try {
+      getDb();
+      const days = parseInt(req.query.days || '30', 10);
+      const data = getEquityCurve(days);
+      res.json(data);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Risk dashboard summary
+  app.get('/api/risk-summary', (req, res) => {
+    try {
+      getDb();
+      const portfolio = getPortfolioSummary();
+      const trades = getOpenTrades();
+      const totalCapital = portfolio.totalCapital;
+
+      // Sector lookup
+      const sectorMap = {};
+      for (const s of FNO_STOCKS) sectorMap[s.symbol] = s.sector;
+
+      // Position allocation
+      const positions = trades.map(t => ({
+        symbol: t.symbol,
+        sector: sectorMap[t.symbol] || 'Other',
+        capital: t.capital_used,
+        pct: totalCapital > 0 ? Math.round((t.capital_used / totalCapital) * 10000) / 100 : 0,
+      }));
+
+      const availablePct = totalCapital > 0
+        ? Math.round((portfolio.availableCapital / totalCapital) * 10000) / 100
+        : 100;
+
+      // Sector exposure (aggregate by sector)
+      const sectorTotals = {};
+      for (const p of positions) {
+        sectorTotals[p.sector] = (sectorTotals[p.sector] || 0) + p.capital;
+      }
+      const sectorExposure = Object.entries(sectorTotals).map(([sector, capital]) => ({
+        sector,
+        capital,
+        pct: totalCapital > 0 ? Math.round((capital / totalCapital) * 10000) / 100 : 0,
+      }));
+
+      // Drawdown from daily_summary
+      const db = getDb();
+      const summaries = db.prepare(
+        'SELECT ending_capital FROM daily_summary WHERE ending_capital IS NOT NULL ORDER BY date ASC'
+      ).all();
+      let peakCapital = totalCapital;
+      let maxDrawdownPct = 0;
+      for (const row of summaries) {
+        if (row.ending_capital > peakCapital) peakCapital = row.ending_capital;
+        const dd = peakCapital > 0 ? ((peakCapital - row.ending_capital) / peakCapital) * 100 : 0;
+        if (dd > maxDrawdownPct) maxDrawdownPct = dd;
+      }
+      const currentCapitalVal = totalCapital + portfolio.unrealizedPnl;
+      const currentDrawdownPct = peakCapital > 0 ? Math.max(0, ((peakCapital - currentCapitalVal) / peakCapital) * 100) : 0;
+
+      // Risk metrics
+      const totalHeat = trades.reduce((s, t) => s + t.capital_used, 0);
+
+      const worstCaseLoss = trades.reduce((s, t) => {
+        if (!t.stop_loss) return s;
+        const loss = t.type === 'CALL'
+          ? (t.entry_price - t.stop_loss) * t.lot_size * t.quantity
+          : (t.stop_loss - t.entry_price) * t.lot_size * t.quantity;
+        return s - Math.abs(loss);
+      }, 0);
+
+      const avgRiskReward = trades.length > 0
+        ? trades.reduce((s, t) => {
+            if (!t.stop_loss || !t.target1) return s;
+            const risk = Math.abs(t.entry_price - t.stop_loss);
+            const reward = Math.abs(t.target1 - t.entry_price);
+            return s + (risk > 0 ? reward / risk : 0);
+          }, 0) / trades.length
+        : 0;
+
+      // Win/loss streak
+      const recent = db.prepare(
+        `SELECT pnl FROM trades WHERE status IN ('CLOSED','STOPPED') ORDER BY exited_at DESC LIMIT 20`
+      ).all();
+      let winStreak = 0, lossStreak = 0;
+      for (const t of recent) {
+        if ((t.pnl || 0) > 0) { winStreak++; if (lossStreak > 0) break; }
+        else if ((t.pnl || 0) < 0) { lossStreak++; if (winStreak > 0) break; }
+        else break;
+      }
+
+      res.json({
+        allocation: {
+          positions,
+          available: { capital: Math.round(portfolio.availableCapital * 100) / 100, pct: availablePct },
+        },
+        sectorExposure,
+        drawdown: {
+          peakCapital: Math.round(peakCapital * 100) / 100,
+          currentCapital: Math.round(currentCapitalVal * 100) / 100,
+          maxDrawdownPct: Math.round(maxDrawdownPct * 100) / 100,
+          currentDrawdownPct: Math.round(currentDrawdownPct * 100) / 100,
+        },
+        metrics: {
+          totalHeat: Math.round(totalHeat * 100) / 100,
+          worstCaseLoss: Math.round(worstCaseLoss * 100) / 100,
+          avgRiskReward: Math.round(avgRiskReward * 100) / 100,
+          winStreak,
+          lossStreak,
+        },
+      });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
