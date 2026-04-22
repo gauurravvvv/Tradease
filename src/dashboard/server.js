@@ -667,20 +667,34 @@ export function startDashboard(port = 3777) {
 
   // Run backtest from dashboard
   app.post('/api/backtest/run', async (req, res) => {
+    // Set long timeout for backtest (5 minutes)
+    req.setTimeout(300000);
+    res.setTimeout(300000);
+
     try {
       const { runBacktest } = await import('../backtesting/engine.js');
       const { saveBacktestResult } = await import('../backtesting/report.js');
       const { FNO_STOCKS } = await import('../data/fno-stocks.js');
 
-      const { strategy = 'screener', days = 90 } = req.body || {};
+      const { strategy = 'screener', days = 90, symbolCount = 5 } = req.body || {};
       const end = new Date().toISOString().slice(0, 10);
       const start = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
-      const symbols = FNO_STOCKS.slice(0, 10).map(s => s.symbol);
+      const count = Math.min(Math.max(1, parseInt(symbolCount) || 5), 15);
+      const symbols = FNO_STOCKS.slice(0, count).map(s => s.symbol);
+
+      logger.info(`[backtest] Dashboard request: ${strategy}, ${symbols.length} symbols, ${start} → ${end}`);
 
       const result = await runBacktest({ strategy, symbols, startDate: start, endDate: end });
       saveBacktestResult(result);
-      res.json(result);
+
+      // Strip equity curve and trade details to reduce response size
+      res.json({
+        metrics: result.metrics,
+        config: result.config,
+        tradeCount: result.trades?.length || 0,
+      });
     } catch (err) {
+      logger.error(`[backtest] Dashboard backtest failed: ${err.message}`);
       res.status(500).json({ error: err.message });
     }
   });
@@ -1112,6 +1126,12 @@ export function startDashboard(port = 3777) {
     }
     await sendTelegram('🧪 Test message from Tradease dashboard!');
     res.json({ success: true });
+  });
+
+  // Catch-all JSON error handler for API routes
+  app.use('/api', (err, req, res, next) => {
+    logger.error(`[api] Unhandled error: ${err.message}`);
+    res.status(500).json({ error: err.message || 'Internal server error' });
   });
 
   // Start server

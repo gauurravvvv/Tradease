@@ -721,7 +721,7 @@ const INR2=n=>{if(n==null||isNaN(n))return'₹0';const neg=n<0;return`${neg?'-':
 const pct=n=>{if(n==null||isNaN(n))return'0.0%';return`${n>=0?'+':''}${n.toFixed(1)}%`};
 const pc=n=>n>=0?'text-green':'text-red';
 const spin=(id,on)=>{const el=document.getElementById(id);if(el)el.classList.toggle('active',on)};
-const api=async(url,opts)=>{const r=await fetch(url,opts);const j=await r.json();if(!r.ok)throw new Error(j.error||'Request failed');return j};
+const api=async(url,opts)=>{const r=await fetch(url,opts);const ct=r.headers.get('content-type')||'';if(!ct.includes('application/json')){const txt=await r.text();throw new Error(r.ok?'Unexpected response':'Server error: '+r.status)}const j=await r.json();if(!r.ok)throw new Error(j.error||'Request failed');return j};
 const timeAgo=d=>{if(!d)return'';const m=Math.round((Date.now()-new Date(d).getTime())/60000);if(m<1)return'just now';if(m<60)return m+'m ago';return Math.round(m/60)+'h ago'};
 
 let _tradeSugg=null,_quickTradeData=null,_scanAge=null,_prevPrices={};
