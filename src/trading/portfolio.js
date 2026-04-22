@@ -194,7 +194,6 @@ export function saveDailySummary() {
   const db = getDb();
   const day = todayStr();
 
-  // Trades closed today
   const closedToday = db
     .prepare(
       `SELECT * FROM trades
@@ -208,22 +207,97 @@ export function saveDailySummary() {
   const losingTrades = closedToday.filter((t) => (t.pnl ?? 0) < 0).length;
   const grossPnl = closedToday.reduce((s, t) => s + (t.pnl ?? 0), 0);
 
-  // Upsert
+  // Compute ending capital: base + all realized P&L + unrealized
+  const allClosed = db.prepare(
+    `SELECT COALESCE(SUM(pnl), 0) as totalPnl FROM trades WHERE status IN ('CLOSED', 'STOPPED')`
+  ).get();
+  const openTrades = db.prepare('SELECT * FROM trades WHERE status = ?').all('OPEN');
+  const unrealized = openTrades.reduce((sum, t) => sum + unrealisedPnl(t), 0);
+  const endingCapital = Math.round((TRADING.VIRTUAL_CAPITAL + allClosed.totalPnl + unrealized) * 100) / 100;
+
   db.prepare(`
-    INSERT INTO daily_summary (date, total_trades, winning_trades, losing_trades, gross_pnl)
-    VALUES (@day, @totalTrades, @winningTrades, @losingTrades, @grossPnl)
+    INSERT INTO daily_summary (date, total_trades, winning_trades, losing_trades, gross_pnl, ending_capital)
+    VALUES (@day, @totalTrades, @winningTrades, @losingTrades, @grossPnl, @endingCapital)
     ON CONFLICT(date) DO UPDATE SET
       total_trades   = @totalTrades,
       winning_trades = @winningTrades,
       losing_trades  = @losingTrades,
-      gross_pnl      = @grossPnl
+      gross_pnl      = @grossPnl,
+      ending_capital = @endingCapital
   `).run({
     day,
     totalTrades,
     winningTrades,
     losingTrades,
     grossPnl: Math.round(grossPnl * 100) / 100,
+    endingCapital,
   });
 
   return db.prepare('SELECT * FROM daily_summary WHERE date = ?').get(day);
+}
+
+// ---------------------------------------------------------------------------
+// Equity curve
+// ---------------------------------------------------------------------------
+
+/**
+ * Get equity curve and daily P&L data for charting.
+ * @param {number} days - Number of days to look back
+ * @returns {{ curve: Array, dailyPnl: Array, stats: Object }}
+ */
+export function getEquityCurve(days = 30) {
+  const db = getDb();
+
+  const rows = db.prepare(
+    `SELECT date, gross_pnl, ending_capital
+     FROM daily_summary
+     WHERE date >= date('now', '-' || @days || ' days')
+     ORDER BY date ASC`
+  ).all({ days });
+
+  const startingCapital = TRADING.VIRTUAL_CAPITAL;
+
+  const curve = rows
+    .filter(r => r.ending_capital != null)
+    .map(r => ({ time: r.date, value: r.ending_capital }));
+
+  const dailyPnl = rows.map(r => ({
+    time: r.date,
+    value: r.gross_pnl || 0,
+    color: (r.gross_pnl || 0) >= 0 ? 'rgba(34,197,94,0.8)' : 'rgba(239,68,68,0.8)',
+  }));
+
+  let peakCapital = startingCapital;
+  let maxDrawdown = 0;
+  let bestDay = 0;
+  let worstDay = 0;
+  const currentCapital = curve.length ? curve[curve.length - 1].value : startingCapital;
+
+  for (const row of rows) {
+    const cap = row.ending_capital || startingCapital;
+    if (cap > peakCapital) peakCapital = cap;
+    const dd = peakCapital > 0 ? ((peakCapital - cap) / peakCapital) * 100 : 0;
+    if (dd > maxDrawdown) maxDrawdown = dd;
+    const pnl = row.gross_pnl || 0;
+    if (pnl > bestDay) bestDay = pnl;
+    if (pnl < worstDay) worstDay = pnl;
+  }
+
+  const totalReturn = startingCapital > 0
+    ? ((currentCapital - startingCapital) / startingCapital) * 100
+    : 0;
+
+  return {
+    curve,
+    dailyPnl,
+    stats: {
+      startingCapital,
+      currentCapital: Math.round(currentCapital * 100) / 100,
+      totalReturn: Math.round(totalReturn * 100) / 100,
+      maxDrawdown: Math.round(maxDrawdown * 100) / 100,
+      peakCapital: Math.round(peakCapital * 100) / 100,
+      bestDay: Math.round(bestDay * 100) / 100,
+      worstDay: Math.round(worstDay * 100) / 100,
+    },
+  };
 }
