@@ -1030,6 +1030,43 @@ export function startDashboard(port = 3777) {
     }
   });
 
+  // ── Trade Journal ──────────────────────────────────────────────────────
+
+  app.get('/api/journal', async (req, res) => {
+    try {
+      const { getJournalEntries, getJournalStats } = await import('../trading/journal.js');
+      const days = parseInt(req.query.days || '30', 10);
+      const symbol = req.query.symbol || undefined;
+      const tag = req.query.tag || undefined;
+      const entries = getJournalEntries({ days, symbol, tag });
+      const stats = getJournalStats(days);
+      res.json({ entries, stats });
+    } catch (err) {
+      res.json({ entries: [], stats: { totalEntries: 0, avgRating: 0, tagBreakdown: {}, winners: 0, losers: 0 } });
+    }
+  });
+
+  app.put('/api/journal/:id', async (req, res) => {
+    try {
+      const { updateJournalEntry } = await import('../trading/journal.js');
+      const id = parseInt(req.params.id, 10);
+      updateJournalEntry(id, req.body);
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post('/api/journal/auto', async (req, res) => {
+    try {
+      const { autoJournalRecentTrades } = await import('../trading/journal.js');
+      const created = autoJournalRecentTrades();
+      res.json({ ok: true, created });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // ── Telegram Configuration ─────────────────────────────────────────────
 
   app.get('/api/telegram/status', async (req, res) => {

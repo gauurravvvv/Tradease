@@ -539,6 +539,27 @@
   </div>
 </div>
 
+<!-- Trade Journal -->
+<div class="section" id="journal-section">
+  <div class="section-header" onclick="toggleSection(this)">
+    <span class="section-title"><span class="chevron">▼</span>Trade Journal</span>
+    <div class="section-actions">
+      <span class="badge badge-gray" id="journal-badge">--</span>
+      <button class="btn btn-sm" onclick="autoJournal();event.stopPropagation()">Auto-Journal</button>
+    </div>
+  </div>
+  <div class="section-content">
+    <div id="journal-stats" style="display:flex;gap:16px;margin-bottom:12px;font-size:0.65rem;color:var(--text-dim);flex-wrap:wrap"></div>
+    <div id="journal-filters" style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+      <button class="btn btn-sm journal-filter active" onclick="loadJournal(7,this)" data-days="7">7d</button>
+      <button class="btn btn-sm journal-filter" onclick="loadJournal(30,this)" data-days="30">30d</button>
+      <button class="btn btn-sm journal-filter" onclick="loadJournal(90,this)" data-days="90">90d</button>
+      <button class="btn btn-sm journal-filter" onclick="loadJournal(365,this)" data-days="365">All</button>
+    </div>
+    <div id="journal-container"><div class="empty">Loading...</div></div>
+  </div>
+</div>
+
 <!-- Stats + History -->
 <div class="grid-2">
   <div class="section">
@@ -1300,15 +1321,91 @@ const fmt=n=>{if(n==null||isNaN(n))return'0';return Math.abs(n).toLocaleString('
       } catch (err) { console.error('Equity curve load failed:', err); }
     }
 
+// ── Trade Journal ──
+let _journalDays = 7;
+async function loadJournal(days, btnEl) {
+  if (days) _journalDays = days;
+  if (btnEl) {
+    document.querySelectorAll('.journal-filter').forEach(b => b.classList.remove('active'));
+    btnEl.classList.add('active');
+  }
+  try {
+    const data = await api(`/api/journal?days=${_journalDays}`);
+    const { entries, stats } = data;
+    document.getElementById('journal-badge').textContent = `${stats.totalEntries} entries`;
+
+    // Stats row
+    const statsEl = document.getElementById('journal-stats');
+    if (stats.totalEntries > 0) {
+      const wr = stats.winners + stats.losers > 0 ? ((stats.winners / (stats.winners + stats.losers)) * 100).toFixed(0) : 0;
+      statsEl.innerHTML = `
+        <span>Entries: <b>${stats.totalEntries}</b></span>
+        <span>Winners: <b class="text-green">${stats.winners}</b></span>
+        <span>Losers: <b class="text-red">${stats.losers}</b></span>
+        <span>Win Rate: <b class="${wr >= 50 ? 'text-green' : 'text-red'}">${wr}%</b></span>
+        <span>Avg Rating: <b>${stats.avgRating || '--'}</b>/5</span>
+        ${Object.keys(stats.tagBreakdown || {}).slice(0, 5).map(t => `<span class="badge badge-gray">${t}: ${stats.tagBreakdown[t]}</span>`).join('')}
+      `;
+    } else {
+      statsEl.innerHTML = '<span>No journal entries yet</span>';
+    }
+
+    // Entries table
+    const el = document.getElementById('journal-container');
+    if (!entries.length) {
+      el.innerHTML = '<div class="empty">No journal entries — trades auto-journal after market close</div>';
+      return;
+    }
+    el.innerHTML = `<table><thead><tr>
+      <th>Date</th><th>Symbol</th><th>Type</th><th>Entry</th><th>Exit</th><th>P&L</th><th>Tags</th><th>Rating</th><th>Notes</th>
+    </tr></thead><tbody>${entries.map(e => {
+      const pnl = e.pnl || 0;
+      const rating = e.rating ? '★'.repeat(e.rating) + '☆'.repeat(5 - e.rating) : '<span class="text-dim">--</span>';
+      const tags = (e.tags || '').split(',').filter(Boolean).map(t => `<span class="badge badge-gray" style="margin:1px">${t.trim()}</span>`).join('');
+      const notes = e.notes ? `<span title="${e.notes.replace(/"/g, '&quot;')}" style="cursor:help">${e.notes.slice(0, 30)}${e.notes.length > 30 ? '...' : ''}</span>` : '--';
+      return `<tr>
+        <td style="white-space:nowrap">${e.entry_date ? new Date(e.entry_date).toLocaleDateString('en-IN', { day:'2-digit', month:'short' }) : '--'}</td>
+        <td class="text-bold">${e.symbol}</td>
+        <td><span class="badge ${e.type === 'CALL' ? 'badge-green' : 'badge-red'}">${e.type}</span></td>
+        <td>₹${e.entry_price?.toFixed(1) || '--'}</td>
+        <td>₹${e.exit_price?.toFixed(1) || '--'}</td>
+        <td class="${pnl >= 0 ? 'text-green' : 'text-red'} text-bold">${pnl >= 0 ? '+' : ''}₹${Math.abs(pnl).toFixed(0)}</td>
+        <td>${tags}</td>
+        <td style="color:var(--yellow);cursor:pointer" onclick="rateJournal(${e.id}, ${e.rating || 0})">${rating}</td>
+        <td class="text-dim" style="font-size:0.6rem;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${notes}</td>
+      </tr>`;
+    }).join('')}</tbody></table>`;
+  } catch (err) {
+    document.getElementById('journal-container').innerHTML = '<div class="empty">Journal unavailable</div>';
+  }
+}
+
+async function rateJournal(id, currentRating) {
+  const newRating = currentRating >= 5 ? 1 : currentRating + 1;
+  try {
+    await api(`/api/journal/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rating: newRating }) });
+    loadJournal();
+  } catch {}
+}
+
+async function autoJournal() {
+  try {
+    const r = await api('/api/journal/auto', { method: 'POST' });
+    toast(`Auto-journaled ${r.created} trade(s)`, 'success');
+    loadJournal();
+  } catch (e) { toast('Auto-journal failed: ' + e.message, 'error'); }
+}
+
 async function initialLoad(){
   await Promise.all([loadDashboard(),loadMarketStatus(),loadRecommendations(),loadLiveNews(),loadAgentStatus()]);
   document.getElementById('last-updated').textContent=`Live: ${new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}`;
   loadPicks().then(()=>loadNews());
   loadRiskDashboard();
   loadEquityCurve(7);
+  loadJournal();
 }
 function updateTimestamp(){document.getElementById('last-updated').textContent=`Live: ${new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}`}
-async function refreshAll(){await Promise.all([loadDashboard(),loadMarketStatus(),loadRecommendations(),loadPicks(),loadLiveNews(),loadAgentStatus(),loadRiskDashboard()]);loadNews();updateTimestamp();toast('Dashboard refreshed','info',2000)}
+async function refreshAll(){await Promise.all([loadDashboard(),loadMarketStatus(),loadRecommendations(),loadPicks(),loadLiveNews(),loadAgentStatus(),loadRiskDashboard()]);loadNews();loadJournal();updateTimestamp();toast('Dashboard refreshed','info',2000)}
 
 initialLoad();
 // Fallback polling (SSE handles most live updates)

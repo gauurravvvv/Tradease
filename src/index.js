@@ -381,6 +381,14 @@ program
           } catch (err) {
             logger.error(`[daemon] saveDailySummary failed: ${err.message}`);
           }
+          // Auto-journal closed trades
+          try {
+            const { autoJournalRecentTrades } = await import('./trading/journal.js');
+            const journaled = autoJournalRecentTrades();
+            if (journaled > 0) logger.info(`[daemon] Auto-journaled ${journaled} trade(s)`);
+          } catch (err) {
+            logger.error(`[daemon] autoJournal failed: ${err.message}`);
+          }
           const portfolio = getPortfolioSummary();
           const stats = getPerformanceStats(30);
           logger.info(`[daemon] Capital: ${formatCurrency(portfolio.totalCapital)} | Unrealized: ${formatCurrency(portfolio.unrealizedPnl)}`);
