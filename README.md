@@ -59,10 +59,35 @@ AI-powered autonomous Indian F&O (Futures & Options) paper trading system. Three
 
 ---
 
+## Claude Code CLI Integration
+
+Tradease uses **Claude Code CLI** (`claude`) as its AI engine — spawned as a child process via `child_process.spawn()`. No direct API keys needed; it uses your authenticated Claude Code session.
+
+### How Claude is Used
+
+| Context | Model | When Called | Token Budget |
+|---------|-------|-------------|-------------|
+| **Pre-market scan** | Default (Sonnet) | Once per morning, analyzes top screened stocks | ~4000 output tokens |
+| **Deep research** | Default (Sonnet) | On-demand, full stock analysis | ~4000 output tokens |
+| **Trade Strategist agent** | Haiku 4.5 | Only for borderline candidates (score 60-69 with news) | ~600 output tokens |
+| **Position Guardian agent** | Haiku 4.5 | Only for ambiguous exits (profitable + urgent signal) | ~400 output tokens |
+| **News Sentinel agent** | Haiku 4.5 | Only for edge-case headline relevance scoring | ~400 output tokens |
+
+### Token Efficiency
+
+**Most decisions are rule-based — no Claude calls needed.** The system is designed to minimize token consumption:
+
+- **Trade entries**: Stocks scoring 70+ are auto-entered by rules (RSI, volume, confluence, ATR). Claude is only consulted for borderline 60-69 scores with news signals — roughly **0-2 calls per day**.
+- **Trade exits**: Stop-loss, trailing stops, T1/T2 targets, and index crash exits are all mechanical. Claude is only asked when a profitable position receives an `urgent_exit` signal — **rare, ~0-1 calls per day**.
+- **News scoring**: Keyword-based sentiment (no AI). Claude only used if edge cases arise.
+- **All agents use Haiku 4.5** (cheapest model) with strict output caps (400-600 tokens).
+
+**Typical daily token usage**: ~2,000-5,000 tokens on a quiet day. Up to ~15,000 tokens on active scan + research days. The pre-market scan is the largest single call.
+
 ## Prerequisites
 
 - **Node.js 18+** (20+ recommended)
-- **Claude Code CLI** — installed and authenticated
+- **Claude Code CLI** — installed and authenticated (`npm install -g @anthropic-ai/claude-code`)
 - **macOS/Linux** (desktop notifications via `node-notifier`)
 
 ## Installation
