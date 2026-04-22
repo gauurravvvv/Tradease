@@ -1,0 +1,4 @@
+node_modules/
+data/trades.db
+.DS_Store
+*.log

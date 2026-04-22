@@ -1,0 +1,32 @@
+{
+  "name": "tradeoracle",
+  "version": "1.0.0",
+  "description": "AI-powered Indian F&O trading decision system using Claude",
+  "main": "src/index.js",
+  "type": "module",
+  "bin": {
+    "tradeoracle": "./src/index.js"
+  },
+  "scripts": {
+    "start": "node src/index.js daemon",
+    "scan": "node src/index.js scan",
+    "test": "node --experimental-vm-modules node_modules/.bin/jest"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.3.0",
+    "boxen": "^8.0.1",
+    "chalk": "^5.3.0",
+    "cli-table3": "^0.6.5",
+    "commander": "^12.1.0",
+    "inquirer": "^9.3.0",
+    "node-cron": "^3.0.3",
+    "ora": "^8.0.1",
+    "rss-parser": "^3.13.0",
+    "technicalindicators": "^3.1.0",
+    "yahoo-finance2": "^3.14.0"
+  },
+  "devDependencies": {
+    "@jest/globals": "^29.7.0",
+    "jest": "^29.7.0"
+  }
+}
