@@ -1,4 +1,12 @@
 import { RSI, MACD, BollingerBands, ATR, SMA, EMA } from 'technicalindicators';
+import {
+  bullishengulfingpattern, bearishengulfingpattern,
+  doji, hammerpattern, hangingman,
+  morningstar, eveningstar,
+  threewhitesoldiers, threeblackcrows,
+  piercingline, darkcloudcover,
+  bullishharami, bearishharami,
+} from 'technicalindicators';
 
 /**
  * Compute ATR (Average True Range) for OHLCV data.
@@ -142,6 +150,12 @@ export function analyzeTechnicals(ohlcvData) {
   // --- Support/Resistance ---
   const supportResistance = findSupportResistance(ohlcvData);
 
+  // --- Candlestick Patterns ---
+  const candlestickPatterns = detectCandlestickPatterns(ohlcvData);
+
+  // --- Fibonacci Levels ---
+  const fibonacci = calculateFibonacciLevels(ohlcvData);
+
   // --- Overall signal & score ---
   const { overallSignal, score } = computeOverallSignal({
     rsi: rsiResult,
@@ -163,6 +177,8 @@ export function analyzeTechnicals(ohlcvData) {
     ema: emaResult,
     volume: volumeResult,
     supportResistance,
+    candlestickPatterns,
+    fibonacci,
     overallSignal,
     score,
   };
@@ -397,6 +413,182 @@ function computeOverallSignal({ rsi, macd, bollingerBands, sma, ema, volume, sup
   return { overallSignal, score };
 }
 
+// ─── Candlestick Pattern Detection ───────────────────────────────────
+
+const CANDLE_PATTERNS = [
+  { fn: bullishengulfingpattern, name: 'Bullish Engulfing', type: 'bullish', significance: 'high' },
+  { fn: bearishengulfingpattern, name: 'Bearish Engulfing', type: 'bearish', significance: 'high' },
+  { fn: doji, name: 'Doji', type: 'neutral', significance: 'medium' },
+  { fn: hammerpattern, name: 'Hammer', type: 'bullish', significance: 'high' },
+  { fn: hangingman, name: 'Hanging Man', type: 'bearish', significance: 'high' },
+  { fn: morningstar, name: 'Morning Star', type: 'bullish', significance: 'high' },
+  { fn: eveningstar, name: 'Evening Star', type: 'bearish', significance: 'high' },
+  { fn: threewhitesoldiers, name: 'Three White Soldiers', type: 'bullish', significance: 'high' },
+  { fn: threeblackcrows, name: 'Three Black Crows', type: 'bearish', significance: 'high' },
+  { fn: piercingline, name: 'Piercing Line', type: 'bullish', significance: 'medium' },
+  { fn: darkcloudcover, name: 'Dark Cloud Cover', type: 'bearish', significance: 'medium' },
+  { fn: bullishharami, name: 'Bullish Harami', type: 'bullish', significance: 'medium' },
+  { fn: bearishharami, name: 'Bearish Harami', type: 'bearish', significance: 'medium' },
+];
+
+/**
+ * Detect candlestick patterns in last 5 candles.
+ * @param {Array} ohlcvData - Array of { date, open, high, low, close, volume }
+ * @returns {Array} Detected patterns: [{ name, type, significance }]
+ */
+export function detectCandlestickPatterns(ohlcvData) {
+  if (!ohlcvData || ohlcvData.length < 5) return [];
+
+  const last5 = ohlcvData.slice(-5);
+  const input = {
+    open: last5.map(d => d.open),
+    high: last5.map(d => d.high),
+    low: last5.map(d => d.low),
+    close: last5.map(d => d.close),
+  };
+
+  const detected = [];
+
+  for (const pattern of CANDLE_PATTERNS) {
+    try {
+      const result = pattern.fn(input);
+      // Pattern fns return boolean or array. If truthy/has true value, pattern detected.
+      const found = Array.isArray(result)
+        ? result[result.length - 1] === true
+        : result === true;
+
+      if (found) {
+        detected.push({
+          name: pattern.name,
+          type: pattern.type,
+          significance: pattern.significance,
+        });
+      }
+    } catch {
+      // Skip pattern if data insufficient
+    }
+  }
+
+  return detected;
+}
+
+// ─── Fibonacci Retracement Levels ────────────────────────────────────
+
+/**
+ * Calculate Fibonacci retracement levels from recent swing high/low.
+ * Uses last 90 days of close data.
+ * @param {Array} ohlcvData - Array of { date, open, high, low, close, volume }
+ * @returns {Object} { swingHigh, swingLow, levels, nearestLevel }
+ */
+export function calculateFibonacciLevels(ohlcvData) {
+  if (!ohlcvData || ohlcvData.length < 2) {
+    return { swingHigh: null, swingLow: null, levels: {}, nearestLevel: null };
+  }
+
+  const data = ohlcvData.slice(-90);
+  const closes = data.map(d => d.close).filter(Boolean);
+
+  if (closes.length < 2) {
+    return { swingHigh: null, swingLow: null, levels: {}, nearestLevel: null };
+  }
+
+  const high = Math.max(...closes);
+  const low = Math.min(...closes);
+  const diff = high - low;
+
+  if (diff === 0) {
+    return { swingHigh: high, swingLow: low, levels: {}, nearestLevel: null };
+  }
+
+  const fibRatios = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
+  const levels = {};
+  for (const ratio of fibRatios) {
+    levels[ratio] = Math.round((high - diff * ratio) * 100) / 100;
+  }
+
+  // Find nearest fib level to current price
+  const currentPrice = closes[closes.length - 1];
+  let nearestLevel = null;
+  let minDist = Infinity;
+  for (const [ratio, level] of Object.entries(levels)) {
+    const dist = Math.abs(currentPrice - level);
+    if (dist < minDist) {
+      minDist = dist;
+      nearestLevel = {
+        ratio: parseFloat(ratio),
+        level,
+        distance: Math.round((dist / currentPrice) * 10000) / 100, // as percentage
+      };
+    }
+  }
+
+  return { swingHigh: high, swingLow: low, levels, nearestLevel };
+}
+
+// ─── Fundamental Score ───────────────────────────────────────────────
+
+/**
+ * Score fundamental data if provided. Optional — technicals don't require it.
+ * @param {Object|null} fundamentals - Quote with fundamental fields (pe, eps, bookValue, etc.)
+ * @returns {Object} { score, signals }
+ */
+export function computeFundamentalScore(fundamentals) {
+  if (!fundamentals) return { score: null, signals: [] };
+
+  let score = 50;
+  const signals = [];
+
+  // PE ratio scoring
+  if (fundamentals.pe != null) {
+    if (fundamentals.pe > 0 && fundamentals.pe < 15) {
+      score += 10;
+      signals.push({ metric: 'PE', value: fundamentals.pe, signal: 'undervalued' });
+    } else if (fundamentals.pe >= 15 && fundamentals.pe <= 25) {
+      score += 5;
+      signals.push({ metric: 'PE', value: fundamentals.pe, signal: 'fair' });
+    } else if (fundamentals.pe > 40) {
+      score -= 10;
+      signals.push({ metric: 'PE', value: fundamentals.pe, signal: 'overvalued' });
+    }
+  }
+
+  // 52-week range position
+  if (fundamentals.fiftyTwoWeekHigh != null && fundamentals.fiftyTwoWeekLow != null && fundamentals.price != null) {
+    const range = fundamentals.fiftyTwoWeekHigh - fundamentals.fiftyTwoWeekLow;
+    if (range > 0) {
+      const position = (fundamentals.price - fundamentals.fiftyTwoWeekLow) / range;
+      if (position < 0.3) {
+        score += 8;
+        signals.push({ metric: '52W Position', value: Math.round(position * 100), signal: 'near_low' });
+      } else if (position > 0.85) {
+        score -= 8;
+        signals.push({ metric: '52W Position', value: Math.round(position * 100), signal: 'near_high' });
+      }
+    }
+  }
+
+  // Price vs 200-day average
+  if (fundamentals.twoHundredDayAverage != null && fundamentals.price != null) {
+    const pctAbove = ((fundamentals.price - fundamentals.twoHundredDayAverage) / fundamentals.twoHundredDayAverage) * 100;
+    if (pctAbove < -10) {
+      score += 7;
+      signals.push({ metric: '200DMA', value: Math.round(pctAbove), signal: 'below_200dma' });
+    } else if (pctAbove > 20) {
+      score -= 7;
+      signals.push({ metric: '200DMA', value: Math.round(pctAbove), signal: 'far_above_200dma' });
+    }
+  }
+
+  // Dividend yield bonus
+  if (fundamentals.dividendYield != null && fundamentals.dividendYield > 2) {
+    score += 5;
+    signals.push({ metric: 'Dividend Yield', value: fundamentals.dividendYield, signal: 'good_yield' });
+  }
+
+  score = Math.max(0, Math.min(100, Math.round(score)));
+  return { score, signals };
+}
+
 function buildEmptyResult() {
   return {
     rsi: { value: null, signal: 'neutral' },
@@ -407,6 +599,8 @@ function buildEmptyResult() {
     ema: { ema9: null, ema21: null, trend: 'neutral' },
     volume: { current: 0, average20: 0, ratio: 0, signal: 'normal' },
     supportResistance: { supports: [], resistances: [] },
+    candlestickPatterns: [],
+    fibonacci: { swingHigh: null, swingLow: null, levels: {}, nearestLevel: null },
     overallSignal: 'NEUTRAL',
     score: 50,
   };

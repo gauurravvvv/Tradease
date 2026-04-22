@@ -61,7 +61,21 @@ function blackScholes(S, K, T, r, sigma, type) {
 export async function getOptionsChain(symbol) {
   try {
     const ys = ySymbol(symbol);
-    const result = await yahooFinance.options(ys);
+    // Suppress all Yahoo validation spam (often fails for NSE stocks)
+    const origLog = console.log;
+    const origErr = console.error;
+    const origWarn = console.warn;
+    console.log = () => {};
+    console.error = () => {};
+    console.warn = () => {};
+    let result;
+    try {
+      result = await yahooFinance.options(ys, {}, { validateResult: false });
+    } finally {
+      console.log = origLog;
+      console.error = origErr;
+      console.warn = origWarn;
+    }
     if (!result || !result.options || result.options.length === 0) return null;
 
     const chain = result.options[0];

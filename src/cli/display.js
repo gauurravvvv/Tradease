@@ -2,6 +2,15 @@ import chalk from 'chalk';
 import Table from 'cli-table3';
 import boxen from 'boxen';
 
+// Conditional import — global-cues.js may still be in-flight from another agent
+let getGlobalCues;
+try {
+  const mod = await import('../data/global-cues.js');
+  getGlobalCues = mod.getGlobalCues;
+} catch {
+  getGlobalCues = null;
+}
+
 // ---------------------------------------------------------------------------
 // Currency & number formatting
 // ---------------------------------------------------------------------------
@@ -36,8 +45,31 @@ export function formatPercent(value) {
   return chalk.gray(text);
 }
 
+/**
+ * Format market cap in ₹ Cr / ₹L Cr notation.
+ * Input expected in absolute rupees.
+ */
+export function formatMarketCap(value) {
+  if (value == null || isNaN(value)) return '—';
+  const crores = value / 1e7;
+  if (crores >= 1e5) return `₹${(crores / 1e5).toFixed(1)}L Cr`;
+  if (crores >= 1000) return `₹${(crores / 1000).toFixed(1)}K Cr`;
+  return `₹${Math.round(crores)} Cr`;
+}
+
+/**
+ * Format volume as 15.9M / 1.2L / 5.3K.
+ */
+export function formatVolume(value) {
+  if (value == null || isNaN(value)) return '—';
+  if (value >= 1e7) return `${(value / 1e6).toFixed(1)}M`;
+  if (value >= 1e5) return `${(value / 1e5).toFixed(1)}L`;
+  if (value >= 1e3) return `${(value / 1e3).toFixed(1)}K`;
+  return String(value);
+}
+
 // ---------------------------------------------------------------------------
-// Confidence bar
+// Confidence block bar
 // ---------------------------------------------------------------------------
 
 /**
@@ -54,6 +86,100 @@ export function displayConfidenceBar(confidence) {
   if (confidence > 80) return chalk.green(stars);
   if (confidence >= 60) return chalk.yellow(stars);
   return chalk.red(stars);
+}
+
+/**
+ * Visual block bar for confidence: ████████░░ 85%
+ * 10-block scale. Color: green >= 70, yellow >= 50, red < 50.
+ */
+export function displayConfidenceBlock(confidence) {
+  const c = Math.max(0, Math.min(100, confidence || 0));
+  const filled = Math.round(c / 10);
+  const empty = 10 - filled;
+  const bar = '\u2588'.repeat(filled) + '\u2591'.repeat(empty);
+  const pct = `${c}%`;
+
+  if (c >= 70) return chalk.green(bar) + ' ' + chalk.green.bold(pct);
+  if (c >= 50) return chalk.yellow(bar) + ' ' + chalk.yellow.bold(pct);
+  return chalk.red(bar) + ' ' + chalk.red.bold(pct);
+}
+
+/**
+ * Sentiment bar for -100 to +100 score.
+ * Maps to 10-block scale centered at 5.
+ */
+export function displaySentimentBar(score) {
+  const s = Math.max(-100, Math.min(100, score || 0));
+  // Map -100..+100 to 0..10
+  const filled = Math.round(((s + 100) / 200) * 10);
+  const empty = 10 - filled;
+  const bar = '\u2588'.repeat(filled) + '\u2591'.repeat(empty);
+
+  let label, colorFn;
+  if (s >= 25) { label = 'BULLISH'; colorFn = chalk.green; }
+  else if (s <= -25) { label = 'BEARISH'; colorFn = chalk.red; }
+  else { label = 'MIXED'; colorFn = chalk.yellow; }
+
+  return colorFn(bar) + ' ' + colorFn.bold(label);
+}
+
+// ---------------------------------------------------------------------------
+// Global cues bar
+// ---------------------------------------------------------------------------
+
+/**
+ * Compact global cues display. Takes output from getGlobalCues().
+ * Returns array of formatted lines (no leading newlines).
+ */
+export function displayGlobalCuesBar(cues) {
+  if (!cues) return [];
+
+  const lines = [];
+
+  // US + Asia line
+  const parts1 = [];
+  if (cues.us?.sp500) parts1.push(`S&P ${signedPct(cues.us.sp500.changePct)}`);
+  if (cues.us?.nasdaq) parts1.push(`Nasdaq ${signedPct(cues.us.nasdaq.changePct)}`);
+  if (cues.asia?.nikkei) parts1.push(`Nikkei ${signedPct(cues.asia.nikkei.changePct)}`);
+  if (parts1.length > 0) {
+    lines.push(chalk.white('  GLOBAL: ') + parts1.map(p => colorByPct(p, extractPct(p))).join(chalk.gray(' | ')));
+  }
+
+  // Commodities + DXY + VIX line
+  const parts2 = [];
+  const crude = cues.commodities?.crudeWTI || cues.commodities?.brentCrude;
+  if (crude) parts2.push(`Crude: $${crude.price?.toFixed(0)}(${signedPct(crude.changePct)})`);
+  if (cues.currencies?.dollarIndex) parts2.push(`DXY: ${cues.currencies.dollarIndex.price?.toFixed(0)}(${signedPct(cues.currencies.dollarIndex.changePct)})`);
+  if (cues.volatility?.vix) parts2.push(`VIX: ${cues.volatility.vix.price?.toFixed(0)}(${signedPct(cues.volatility.vix.changePct)})`);
+  if (parts2.length > 0) {
+    lines.push(chalk.white('  ') + parts2.join(chalk.gray(' | ')));
+  }
+
+  // Sentiment bar
+  if (cues.sentimentScore != null) {
+    lines.push(chalk.white('  MOOD: ') + displaySentimentBar(cues.sentimentScore));
+  }
+
+  return lines;
+}
+
+/** Helper: "+0.8%" style string */
+function signedPct(val) {
+  if (val == null || isNaN(val)) return 'N/A';
+  return `${val >= 0 ? '+' : ''}${val.toFixed(1)}%`;
+}
+
+/** Extract numeric pct from string like "+0.8%" */
+function extractPct(str) {
+  const m = str.match(/([+-]?\d+\.?\d*)%/);
+  return m ? parseFloat(m[1]) : 0;
+}
+
+/** Color a string green/red based on pct value */
+function colorByPct(str, pct) {
+  if (pct > 0) return chalk.green(str);
+  if (pct < 0) return chalk.red(str);
+  return chalk.gray(str);
 }
 
 // ---------------------------------------------------------------------------
@@ -77,59 +203,128 @@ export function displayHeader(title, subtitle) {
 }
 
 // ---------------------------------------------------------------------------
-// Trade card
+// Trade card — redesigned for at-a-glance clarity
 // ---------------------------------------------------------------------------
 
 /**
- * Display single trade recommendation in formatted card.
+ * Display single trade recommendation as compact scannable card.
+ *
+ * Layout:
+ * ╭──────────────────────────────────────────────────────╮
+ * │  ██ CALL  RELIANCE  ██████████░░ 85%  ★★★★☆         │
+ * │  ₹2,450 CE  Apr 25 expiry  Lot: 250                 │
+ * │  Entry: ₹45  →  T1: ₹65 (+44%)  →  T2: ₹80 (+78%)  │
+ * │  SL: ₹32 (-29%)  |  Max Loss: ₹3,250                │
+ * │  PE: 28.5  |  52W: ₹2,100-₹2,800  |  MCap: ₹16.5L  │
+ * │  RSI: 65  MACD: ↑  Vol: 2.1x  ATR: 2.8%             │
+ * │  Patterns: Bullish Engulfing + Support Bounce         │
+ * │  WHY: Q4 beat + OI buildup at 2400 support            │
+ * │  RISK: Broad market weakness if global reverse         │
+ * ╰──────────────────────────────────────────────────────╯
  */
 export function displayTradeCard(trade, index = 1) {
-  const typeColor = trade.type === 'CALL' ? chalk.green : chalk.red;
-  const confColor = trade.confidence >= 75 ? chalk.white : chalk.yellow;
-  const stars = displayConfidenceBar(trade.confidence);
+  const isCall = trade.type === 'CALL';
+  const typeBadge = isCall
+    ? chalk.bgGreen.white.bold(` ${trade.type} `)
+    : chalk.bgRed.white.bold(` ${trade.type} `);
 
-  const symbolStr = chalk.bold.white(trade.symbol);
-  const typeStr = typeColor.bold(trade.type);
-  const confStr = confColor(`Confidence: ${trade.confidence}%`);
+  const confBlock = displayConfidenceBlock(trade.confidence || 0);
+  const stars = displayConfidenceBar(trade.confidence || 0);
 
-  console.log(`\n  ${chalk.gray(`#${index}`)}  ${symbolStr}  | ${typeStr} | ${confStr} | ${stars}`);
+  // --- Build card lines ---
+  const lines = [];
 
-  const strike = trade.strike ? `₹${trade.strike.toLocaleString('en-IN')}` : '—';
-  const expiry = trade.expiry || '—';
-  console.log(chalk.gray(`  \u251C\u2500 Entry: ${strike} ${trade.type === 'CALL' ? 'CE' : 'PE'} (${expiry} expiry)`));
+  // Line 1: Big verdict — type badge + symbol + confidence bar + stars
+  lines.push(`  ${typeBadge}  ${chalk.bold.white(trade.symbol)}  ${confBlock}  ${stars}`);
 
-  const premium = trade.premium ? `~₹${trade.premium.toLocaleString('en-IN')}` : '—';
-  const lot = trade.lotSize || '—';
-  const capital = trade.capitalRequired ? formatCurrency(trade.capitalRequired) : '—';
-  console.log(chalk.gray(`  \u251C\u2500 Premium: ${premium} | Lot: ${lot} | Capital: ${capital}`));
+  // Line 2: Strike / expiry / lot
+  const strike = trade.strike ? `\u20B9${trade.strike.toLocaleString('en-IN')}` : '';
+  const optType = isCall ? 'CE' : 'PE';
+  const expiry = trade.expiry || '';
+  const lot = trade.lotSize ? `Lot: ${trade.lotSize}` : '';
+  const strikeLine = [
+    strike ? `${strike} ${optType}` : '',
+    expiry ? `${expiry} expiry` : '',
+    lot,
+  ].filter(Boolean).join('  ');
+  if (strikeLine) lines.push(`  ${chalk.white(strikeLine)}`);
 
-  const slPct = trade.entry_price && trade.stop_loss
-    ? ((trade.stop_loss - trade.entry_price) / trade.entry_price * 100).toFixed(0)
-    : '—';
-  const t1Pct = trade.entry_price && trade.target1
-    ? ((trade.target1 - trade.entry_price) / trade.entry_price * 100).toFixed(0)
-    : '—';
-  const t2Pct = trade.entry_price && trade.target2
-    ? ((trade.target2 - trade.entry_price) / trade.entry_price * 100).toFixed(0)
-    : '—';
-  const maxLoss = trade.maxLoss ? formatCurrency(trade.maxLoss) : '—';
+  // Line 3: Entry → T1 → T2 flow
+  const entry = trade.entry_price || trade.premium;
+  const entryStr = entry ? `\u20B9${entry.toLocaleString('en-IN')}` : '—';
+  const t1Pct = entry && trade.target1
+    ? ` (${((trade.target1 - entry) / entry * 100).toFixed(0)}%)`
+    : '';
+  const t2Pct = entry && trade.target2
+    ? ` (${((trade.target2 - entry) / entry * 100).toFixed(0)}%)`
+    : '';
+  const t1Str = trade.target1 ? `\u20B9${trade.target1.toLocaleString('en-IN')}` : '—';
+  const t2Str = trade.target2 ? `\u20B9${trade.target2.toLocaleString('en-IN')}` : '—';
+  lines.push(
+    `  ${chalk.gray('Entry:')} ${chalk.white.bold(entryStr)}  ${chalk.gray('\u2192')}  ` +
+    `${chalk.gray('T1:')} ${chalk.green(t1Str + t1Pct)}  ${chalk.gray('\u2192')}  ` +
+    `${chalk.gray('T2:')} ${chalk.green(t2Str + t2Pct)}`
+  );
 
-  const sl = trade.stop_loss ? `₹${trade.stop_loss.toLocaleString('en-IN')}` : '—';
-  const t1 = trade.target1 ? `₹${trade.target1.toLocaleString('en-IN')}` : '—';
-  const t2 = trade.target2 ? `₹${trade.target2.toLocaleString('en-IN')}` : '—';
+  // Line 4: SL + Max Loss
+  const slPct = entry && trade.stop_loss
+    ? ` (${((trade.stop_loss - entry) / entry * 100).toFixed(0)}%)`
+    : '';
+  const slStr = trade.stop_loss ? `\u20B9${trade.stop_loss.toLocaleString('en-IN')}` : '—';
+  const maxLoss = trade.maxLoss ? formatCurrency(trade.maxLoss) : '';
+  const slLine = `${chalk.gray('SL:')} ${chalk.red(slStr + slPct)}` +
+    (maxLoss ? `  ${chalk.gray('|')}  ${chalk.gray('Max Loss:')} ${chalk.red(maxLoss)}` : '');
+  lines.push(`  ${slLine}`);
 
-  console.log(chalk.gray(`  \u251C\u2500 Stop-Loss: ${sl} (${slPct}%) | Target 1: ${t1} (${t1Pct}%)`));
-  console.log(chalk.gray(`  \u251C\u2500 Target 2: ${t2} (${t2Pct}%) | Max Loss: ${maxLoss}`));
+  // Line 5: Fundamentals (PE, 52W, MCap) — only if data present
+  const fundParts = [];
+  if (trade.pe != null) fundParts.push(`PE: ${trade.pe}`);
+  if (trade.week52Low != null && trade.week52High != null) {
+    fundParts.push(`52W: \u20B9${trade.week52Low.toLocaleString('en-IN')}-\u20B9${trade.week52High.toLocaleString('en-IN')}`);
+  }
+  if (trade.marketCap != null) fundParts.push(`MCap: ${formatMarketCap(trade.marketCap)}`);
+  if (trade.eps != null) fundParts.push(`EPS: \u20B9${trade.eps}`);
+  if (fundParts.length > 0) {
+    lines.push(`  ${chalk.cyan(fundParts.join('  |  '))}`);
+  }
 
+  // Line 6: Technicals summary (RSI, MACD, Vol, ATR) — only if data present
+  const techParts = [];
+  if (trade.rsi != null) techParts.push(`RSI: ${trade.rsi}`);
+  if (trade.macdTrend) techParts.push(`MACD: ${trade.macdTrend.includes('bullish') ? '\u2191' : '\u2193'}`);
+  if (trade.volumeRatio != null) techParts.push(`Vol: ${trade.volumeRatio.toFixed(1)}x`);
+  if (trade.atrPct != null) techParts.push(`ATR: ${trade.atrPct.toFixed(1)}%`);
+  if (techParts.length > 0) {
+    lines.push(`  ${chalk.yellow(techParts.join('  '))}`);
+  }
+
+  // Line 7: Candlestick patterns — only if present
+  if (trade.patterns && trade.patterns.length > 0) {
+    const patStr = Array.isArray(trade.patterns) ? trade.patterns.join(' + ') : trade.patterns;
+    lines.push(`  ${chalk.gray('Patterns:')} ${chalk.magenta(patStr)}`);
+  }
+
+  // Line 8: WHY (reason)
   if (trade.reason) {
-    console.log(chalk.gray(`  \u251C\u2500 Reason: ${chalk.white(trade.reason)}`));
+    lines.push(`  ${chalk.green.bold('WHY:')} ${chalk.white(trade.reason)}`);
   }
+
+  // Line 9: RISK
   if (trade.risk) {
-    console.log(chalk.gray(`  \u2514\u2500 Risk: ${chalk.yellow(trade.risk)}`));
-  } else {
-    // Close the tree
-    console.log(chalk.gray('  \u2514\u2500'));
+    lines.push(`  ${chalk.red.bold('RISK:')} ${chalk.yellow(trade.risk)}`);
   }
+
+  // Render as boxen card
+  const cardContent = lines.join('\n');
+  const borderColor = isCall ? 'green' : 'red';
+  console.log(boxen(cardContent, {
+    padding: { top: 0, bottom: 0, left: 0, right: 1 },
+    margin: { top: 1, bottom: 0, left: 1, right: 0 },
+    borderStyle: 'round',
+    borderColor,
+    title: chalk.gray(`#${index}`),
+    titleAlignment: 'left',
+  }));
 }
 
 // ---------------------------------------------------------------------------
@@ -224,20 +419,19 @@ export function displayTradesTable(trades) {
 }
 
 // ---------------------------------------------------------------------------
-// Market pulse
+// Market pulse — compact index bar
 // ---------------------------------------------------------------------------
 
 /**
- * Display Nifty and BankNifty with change%.
+ * Display Nifty and BankNifty as compact one-liner with severity.
  */
 export function displayMarketPulse(indexData) {
   const { nifty, bankNifty } = indexData;
 
-  const niftyChange = formatPercent(nifty.changePct);
-  const bankNiftyChange = formatPercent(bankNifty.changePct);
-
   const niftyPrice = nifty.price ? nifty.price.toLocaleString('en-IN') : '—';
   const bankNiftyPrice = bankNifty.price ? bankNifty.price.toLocaleString('en-IN') : '—';
+  const niftyChange = formatPercent(nifty.changePct);
+  const bankNiftyChange = formatPercent(bankNifty.changePct);
 
   const severityBadge = indexData.severity === 'critical'
     ? chalk.bgRed.white.bold(' CRITICAL ')
@@ -245,66 +439,72 @@ export function displayMarketPulse(indexData) {
       ? chalk.bgYellow.black.bold(' WARNING ')
       : chalk.bgGreen.black(' NORMAL ');
 
-  console.log(`\n  ${chalk.bold('NIFTY 50')}     ${niftyPrice}  ${niftyChange}`);
-  console.log(`  ${chalk.bold('BANK NIFTY')}   ${bankNiftyPrice}  ${bankNiftyChange}`);
-  console.log(`  Status: ${severityBadge}\n`);
+  console.log(`\n  ${chalk.bold('NIFTY:')} ${niftyPrice} ${niftyChange}  ${chalk.gray('|')}  ${chalk.bold('BANKNIFTY:')} ${bankNiftyPrice} ${bankNiftyChange}  ${severityBadge}\n`);
 }
 
 // ---------------------------------------------------------------------------
-// Morning brief
+// Morning brief — redesigned with global cues bar
 // ---------------------------------------------------------------------------
 
 /**
- * Full morning brief: header, global cues, trade cards, action menu.
+ * Full morning brief: boxed header with global cues, index prices, trade cards.
+ *
+ * ╔══════════════════════════════════════════════════════════╗
+ * ║  TRADEORACLE                        22 Apr 2026  8:30AM ║
+ * ╠══════════════════════════════════════════════════════════╣
+ * ║  GLOBAL: S&P +0.8% | Nasdaq +1.2% | Nikkei -0.3%       ║
+ * ║  Crude: $82(+0.5%) | DXY: 104(-0.3%) | VIX: 15(-5%)   ║
+ * ║  MOOD: ████████░░ BULLISH                                ║
+ * ╠══════════════════════════════════════════════════════════╣
+ * ║  NIFTY: 24,416 (-0.65%)  |  BANKNIFTY: 57,320 (-0.09%) ║
+ * ╚══════════════════════════════════════════════════════════╝
  */
 export function displayMorningBrief(recommendations, globalCues) {
   const now = new Date();
   const dateStr = now.toLocaleDateString('en-IN', {
-    weekday: 'long',
+    day: '2-digit',
+    month: 'short',
     year: 'numeric',
-    month: 'long',
-    day: 'numeric',
+  });
+  const timeStr = now.toLocaleTimeString('en-IN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
   });
 
-  displayHeader('TradeOracle Morning Brief', dateStr);
+  // Build header block
+  const headerLines = [];
+  headerLines.push(`  ${chalk.bold.cyan('TRADEORACLE')}${' '.repeat(20)}${chalk.gray(`${dateStr}  ${timeStr}`)}`);
 
-  // Global cues bar
+  // Global cues section
   if (globalCues) {
-    console.log(chalk.bold.white('  Global Cues:'));
-
-    if (globalCues.sgxNifty != null) {
-      console.log(`    SGX Nifty: ${formatPercent(globalCues.sgxNifty)}`);
-    }
-    if (globalCues.dowJones != null) {
-      console.log(`    Dow Jones: ${formatPercent(globalCues.dowJones)}`);
-    }
-    if (globalCues.nasdaq != null) {
-      console.log(`    NASDAQ:    ${formatPercent(globalCues.nasdaq)}`);
-    }
-    if (globalCues.asianMarkets != null) {
-      console.log(`    Asia:      ${formatPercent(globalCues.asianMarkets)}`);
-    }
-    if (globalCues.crude != null) {
-      console.log(`    Crude Oil: ${formatPercent(globalCues.crude)}`);
-    }
-    if (globalCues.dxy != null) {
-      console.log(`    DXY:       ${formatPercent(globalCues.dxy)}`);
-    }
-
-    console.log('');
+    headerLines.push(chalk.gray('  ' + '\u2500'.repeat(55)));
+    const cueLines = displayGlobalCuesBar(globalCues);
+    headerLines.push(...cueLines);
   }
+
+  // Index prices section — extract from globalCues or just show separator
+  headerLines.push(chalk.gray('  ' + '\u2500'.repeat(55)));
+
+  const headerContent = headerLines.join('\n');
+  console.log(boxen(headerContent, {
+    padding: { top: 0, bottom: 0, left: 0, right: 1 },
+    margin: { top: 1, bottom: 0, left: 0, right: 0 },
+    borderStyle: 'double',
+    borderColor: 'cyan',
+  }));
 
   // Trade cards
   if (!recommendations || recommendations.length === 0) {
-    console.log(chalk.yellow('  No trade recommendations today.\n'));
+    console.log(chalk.yellow('\n  No trade recommendations today.\n'));
   } else {
-    console.log(chalk.bold.white(`  Top ${recommendations.length} Trade Ideas:\n`));
+    console.log(chalk.bold.white(`\n  Top ${recommendations.length} Trade Ideas`));
     recommendations.forEach((rec, i) => displayTradeCard(rec, i + 1));
   }
 
-  // Action menu
+  // Action menu — compact
   console.log('');
-  console.log(chalk.gray('  \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500'));
+  console.log(chalk.gray('  ' + '\u2500'.repeat(55)));
   console.log(`  ${chalk.cyan('[E]')}xecute all  |  ${chalk.cyan('[1-' + (recommendations?.length || 'N') + ']')} specific  |  ${chalk.cyan('[S]')}kip  |  ${chalk.cyan('[D]')}eep #N`);
   console.log('');
 }

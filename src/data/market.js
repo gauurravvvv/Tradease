@@ -49,6 +49,10 @@ export async function getQuote(symbol) {
   const ys = ySymbol(symbol);
   const result = await yahooFinance.quote(ys);
 
+  if (!result || result.regularMarketPrice == null) {
+    throw new Error(`No data for ${symbol} (Yahoo symbol: ${ys})`);
+  }
+
   const quote = {
     symbol,
     price:         result.regularMarketPrice,
@@ -59,6 +63,16 @@ export async function getQuote(symbol) {
     dayLow:        result.regularMarketDayLow,
     open:          result.regularMarketOpen,
     previousClose: result.regularMarketPreviousClose,
+    // Fundamental fields
+    marketCap:            result.marketCap,
+    pe:                   result.trailingPE || result.forwardPE,
+    eps:                  result.trailingEps || result.epsTrailingTwelveMonths,
+    bookValue:            result.bookValue,
+    dividendYield:        result.dividendYield,
+    fiftyTwoWeekHigh:     result.fiftyTwoWeekHigh,
+    fiftyTwoWeekLow:      result.fiftyTwoWeekLow,
+    fiftyDayAverage:      result.fiftyDayAverage,
+    twoHundredDayAverage: result.twoHundredDayAverage,
   };
 
   cacheSet(cKey, quote);

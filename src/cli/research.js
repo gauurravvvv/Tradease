@@ -4,7 +4,10 @@ import { getOptionsChain, getNearestExpiry, getATMStrike } from '../data/options
 import { analyzeStockQuick, analyzeStockDeep } from '../analysis/claude.js';
 import { analyzeTechnicals } from '../analysis/technicals.js';
 import { calculateStopLoss, calculateTargets } from '../trading/risk.js';
-import { displayHeader, displayTradeCard, formatCurrency, formatPercent } from './display.js';
+import {
+  displayHeader, displayTradeCard, formatCurrency, formatPercent,
+  formatMarketCap, formatVolume, displayConfidenceBlock,
+} from './display.js';
 import ora from 'ora';
 import chalk from 'chalk';
 import Table from 'cli-table3';
@@ -110,12 +113,21 @@ async function runDeepResearch(symbol) {
 
   let quote, history, news, options;
   try {
-    [quote, history, news, options] = await Promise.all([
+    const results = await Promise.allSettled([
       getQuote(symbol),
       getHistorical(symbol, 90),
       getStockNews(symbol),
       getOptionsChain(symbol),
     ]);
+    quote = results[0].status === 'fulfilled' ? results[0].value : null;
+    history = results[1].status === 'fulfilled' ? results[1].value : [];
+    news = results[2].status === 'fulfilled' ? results[2].value : [];
+    options = results[3].status === 'fulfilled' ? results[3].value : null;
+
+    if (!quote) {
+      spinner.fail('Could not fetch quote data');
+      return null;
+    }
     spinner.succeed('All data fetched');
   } catch (err) {
     spinner.fail(`Data fetch failed: ${err.message}`);
@@ -203,26 +215,52 @@ async function runDeepResearch(symbol) {
 // Display helpers
 // ---------------------------------------------------------------------------
 
+/**
+ * Compact quote card:
+ *   RELIANCE  ₹2,450.30  ▲ +1.2%  Vol: 15.9M (1.8x avg)
+ *   O: 2,420  H: 2,465  L: 2,410  PC: 2,421
+ *   PE: 28.5  EPS: ₹86  52W: ₹2,100-₹2,800  MCap: ₹16.5L Cr
+ */
 function displayQuoteCard(quote) {
   const changeColor = quote.changePct >= 0 ? chalk.green : chalk.red;
+  const arrow = quote.changePct >= 0 ? '\u25B2' : '\u25BC';
+  const priceStr = quote.price != null ? `\u20B9${quote.price.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—';
 
-  console.log(`\n  ${chalk.bold.white(quote.symbol)}  ${changeColor(quote.price?.toLocaleString('en-IN'))}  ${formatPercent(quote.changePct)}`);
+  // Line 1: Symbol + price + change + volume
+  const volStr = quote.volume != null ? formatVolume(quote.volume) : '';
+  const avgVolStr = quote.avgVolume
+    ? ` (${(quote.volume / quote.avgVolume).toFixed(1)}x avg)`
+    : '';
+  const volPart = volStr ? `  Vol: ${volStr}${avgVolStr}` : '';
+  console.log(`\n  ${chalk.bold.white(quote.symbol)}  ${chalk.bold(priceStr)}  ${changeColor(`${arrow} ${formatPercent(quote.changePct)}`)}${chalk.gray(volPart)}`);
 
-  const table = new Table({
-    style: { head: [], border: ['gray'] },
-  });
+  // Line 2: OHLC + prev close — compact horizontal
+  const o = quote.open ? `O: ${quote.open.toLocaleString('en-IN')}` : '';
+  const h = quote.dayHigh ? `H: ${quote.dayHigh.toLocaleString('en-IN')}` : '';
+  const l = quote.dayLow ? `L: ${quote.dayLow.toLocaleString('en-IN')}` : '';
+  const pc = quote.previousClose ? `PC: ${quote.previousClose.toLocaleString('en-IN')}` : '';
+  const ohlcParts = [o, h, l, pc].filter(Boolean);
+  if (ohlcParts.length > 0) {
+    console.log(chalk.gray(`  ${ohlcParts.join('  ')}`));
+  }
 
-  table.push(
-    { 'Open': `${formatCurrency(quote.open)}` },
-    { 'Day High': `${formatCurrency(quote.dayHigh)}` },
-    { 'Day Low': `${formatCurrency(quote.dayLow)}` },
-    { 'Prev Close': `${formatCurrency(quote.previousClose)}` },
-    { 'Volume': `${(quote.volume || 0).toLocaleString('en-IN')}` },
-  );
-
-  console.log(table.toString());
+  // Line 3: Fundamentals — PE, EPS, 52W, MCap (if available in quote)
+  const fundParts = [];
+  if (quote.pe != null) fundParts.push(`PE: ${quote.pe.toFixed(1)}`);
+  if (quote.eps != null) fundParts.push(`EPS: \u20B9${quote.eps.toFixed(0)}`);
+  if (quote.week52Low != null && quote.week52High != null) {
+    fundParts.push(`52W: \u20B9${quote.week52Low.toLocaleString('en-IN')}-\u20B9${quote.week52High.toLocaleString('en-IN')}`);
+  }
+  if (quote.marketCap != null) fundParts.push(`MCap: ${formatMarketCap(quote.marketCap)}`);
+  if (fundParts.length > 0) {
+    console.log(chalk.cyan(`  ${fundParts.join('  ')}`));
+  }
+  console.log('');
 }
 
+/**
+ * Compact 90-day price summary — 2 lines.
+ */
 function displayHistorySummary(history, symbol) {
   const closes = history.map(b => b.close).filter(Boolean);
   if (closes.length === 0) return;
@@ -232,19 +270,20 @@ function displayHistorySummary(history, symbol) {
   const max = Math.max(...closes);
   const avg = closes.reduce((a, b) => a + b, 0) / closes.length;
 
-  // Simple trend: compare first 10 avg vs last 10 avg
   const first10 = closes.slice(0, 10);
   const last10 = closes.slice(-10);
   const first10Avg = first10.reduce((a, b) => a + b, 0) / first10.length;
   const last10Avg = last10.reduce((a, b) => a + b, 0) / last10.length;
-  const trend = last10Avg > first10Avg ? chalk.green('UPTREND') : chalk.red('DOWNTREND');
+  const trend = last10Avg > first10Avg ? chalk.green('\u2191 UPTREND') : chalk.red('\u2193 DOWNTREND');
 
-  console.log(chalk.bold.white(`\n  90-Day Price Summary (${symbol}):`));
-  console.log(chalk.gray(`    High: ${formatCurrency(max)}  |  Low: ${formatCurrency(min)}  |  Avg: ${formatCurrency(avg)}`));
-  console.log(chalk.gray(`    Current: ${formatCurrency(current)}  |  Trend: ${trend}`));
-  console.log(chalk.gray(`    Range: ${((max - min) / min * 100).toFixed(1)}%  |  From 90d avg: ${formatPercent((current - avg) / avg * 100)}`));
+  console.log(chalk.bold.white(`\n  90D PRICE `) + chalk.gray('\u2500'.repeat(42)));
+  console.log(`  H: ${chalk.green(formatCurrency(max))}  L: ${chalk.red(formatCurrency(min))}  Avg: ${chalk.white(formatCurrency(avg))}  ${trend}`);
+  console.log(`  Range: ${chalk.white(((max - min) / min * 100).toFixed(1) + '%')}  From avg: ${formatPercent((current - avg) / avg * 100)}`);
 }
 
+/**
+ * Compact options snapshot — top 3 OI each side + PCR.
+ */
 function displayOptionsSnapshot(options) {
   if (!options) return;
 
@@ -252,59 +291,108 @@ function displayOptionsSnapshot(options) {
     ? new Date(options.expirationDate).toLocaleDateString('en-IN')
     : '—';
 
-  console.log(chalk.bold.white(`\n  Options Snapshot (Expiry: ${expiry}):`));
+  console.log(chalk.bold.white(`\n  OPTIONS `) + chalk.gray(`(Exp: ${expiry}) ` + '\u2500'.repeat(35)));
 
-  // Show top 5 by OI for calls and puts
+  // Top 3 by OI
   const topCalls = (options.calls || [])
     .filter(c => c.openInterest > 0)
     .sort((a, b) => b.openInterest - a.openInterest)
-    .slice(0, 5);
+    .slice(0, 3);
 
   const topPuts = (options.puts || [])
     .filter(p => p.openInterest > 0)
     .sort((a, b) => b.openInterest - a.openInterest)
-    .slice(0, 5);
+    .slice(0, 3);
 
   if (topCalls.length > 0) {
-    console.log(chalk.green('    Top CALL OI:'));
-    for (const c of topCalls) {
-      console.log(chalk.gray(`      Strike: ${c.strike}  OI: ${(c.openInterest || 0).toLocaleString('en-IN')}  IV: ${((c.impliedVolatility || 0) * 100).toFixed(1)}%  Last: ₹${c.lastPrice}`));
-    }
+    const callStrs = topCalls.map(c =>
+      `${c.strike} OI:${(c.openInterest || 0).toLocaleString('en-IN')} IV:${((c.impliedVolatility || 0) * 100).toFixed(0)}%`
+    );
+    console.log(`  ${chalk.green('CE:')} ${chalk.gray(callStrs.join('  |  '))}`);
   }
 
   if (topPuts.length > 0) {
-    console.log(chalk.red('    Top PUT OI:'));
-    for (const p of topPuts) {
-      console.log(chalk.gray(`      Strike: ${p.strike}  OI: ${(p.openInterest || 0).toLocaleString('en-IN')}  IV: ${((p.impliedVolatility || 0) * 100).toFixed(1)}%  Last: ₹${p.lastPrice}`));
-    }
+    const putStrs = topPuts.map(p =>
+      `${p.strike} OI:${(p.openInterest || 0).toLocaleString('en-IN')} IV:${((p.impliedVolatility || 0) * 100).toFixed(0)}%`
+    );
+    console.log(`  ${chalk.red('PE:')} ${chalk.gray(putStrs.join('  |  '))}`);
   }
 
-  // Put-Call ratio
+  // PCR line
   const totalCallOI = (options.calls || []).reduce((sum, c) => sum + (c.openInterest || 0), 0);
   const totalPutOI = (options.puts || []).reduce((sum, p) => sum + (p.openInterest || 0), 0);
   const pcr = totalCallOI > 0 ? (totalPutOI / totalCallOI).toFixed(2) : '—';
   const pcrColor = pcr > 1 ? chalk.green : pcr < 0.7 ? chalk.red : chalk.yellow;
 
-  console.log(chalk.gray(`    PCR: ${pcrColor(pcr)}  (Total Call OI: ${totalCallOI.toLocaleString('en-IN')} | Put OI: ${totalPutOI.toLocaleString('en-IN')})`));
+  console.log(`  PCR: ${pcrColor(pcr)}  CallOI: ${chalk.gray(totalCallOI.toLocaleString('en-IN'))}  PutOI: ${chalk.gray(totalPutOI.toLocaleString('en-IN'))}`);
 }
 
+/**
+ * Compact horizontal technicals layout:
+ *   TECHNICALS ──────────────────────────────────
+ *   RSI: 65 [neutral]  |  MACD: ↑ bullish  |  ATR: 183 (3.7%)
+ *   Volume: 0.4x avg [low]  |  Trend: SMA20>50 ↑
+ *   Support: ₹3,945  ₹4,450  |  Resistance: ₹5,303
+ *   Fib: 38.2%=₹4,671  50%=₹4,506  61.8%=₹4,340
+ *   Patterns: Bullish Engulfing (high), Hammer (medium)
+ *   Signal: ████████░░ NEUTRAL (43/100)
+ */
 function displayTechnicalsSummary(t) {
-  console.log(chalk.bold.white('\n  Technical Indicators:'));
+  console.log(chalk.bold.white('\n  TECHNICALS ') + chalk.gray('\u2500'.repeat(40)));
+
+  // Line 1: RSI + MACD + ATR
   const rsiColor = t.rsi.signal === 'overbought' ? chalk.red : t.rsi.signal === 'oversold' ? chalk.green : chalk.yellow;
-  console.log(chalk.gray(`    RSI(14): ${rsiColor(t.rsi.value?.toFixed(1))} [${t.rsi.signal}]`));
-  console.log(chalk.gray(`    MACD: ${t.macd.trend}  |  Histogram: ${t.macd.histogram?.toFixed(2)}`));
-  console.log(chalk.gray(`    ATR(14): ${t.atr.value?.toFixed(2)} (${t.atr.percentage?.toFixed(1)}%)`));
-  console.log(chalk.gray(`    Volume: ${t.volume.signal} (${t.volume.ratio?.toFixed(1)}x avg)`));
-  console.log(chalk.gray(`    SMA: 20=${t.sma.sma20?.toFixed(0)} | 50=${t.sma.sma50?.toFixed(0)} | 200=${t.sma.sma200?.toFixed(0) || '—'}`));
+  const macdArrow = t.macd.trend?.includes('bullish') ? chalk.green('\u2191 bullish') : t.macd.trend?.includes('bearish') ? chalk.red('\u2193 bearish') : chalk.yellow(t.macd.trend || '\u2194');
+  const atrStr = t.atr.value != null ? `${t.atr.value.toFixed(0)} (${t.atr.percentage?.toFixed(1) || '—'}%)` : '—';
+
+  console.log(`  RSI: ${rsiColor(`${t.rsi.value?.toFixed(0)} [${t.rsi.signal}]`)}  ${chalk.gray('|')}  MACD: ${macdArrow}  ${chalk.gray('|')}  ATR: ${chalk.white(atrStr)}`);
+
+  // Line 2: Volume + trend
+  const volSignalColor = t.volume.signal === 'surge' || t.volume.signal === 'high' ? chalk.green : t.volume.signal === 'low' ? chalk.red : chalk.yellow;
+  const volStr = `${t.volume.ratio?.toFixed(1) || '—'}x avg [${t.volume.signal}]`;
+
+  const sma20 = t.sma.sma20;
+  const sma50 = t.sma.sma50;
+  let trendStr = '';
+  if (sma20 != null && sma50 != null) {
+    trendStr = sma20 > sma50
+      ? chalk.green('SMA20>50 \u2191')
+      : chalk.red('SMA20<50 \u2193');
+  }
+
+  console.log(`  Volume: ${volSignalColor(volStr)}  ${chalk.gray('|')}  Trend: ${trendStr}`);
+
+  // Line 3: Support + Resistance
+  const supports = (t.supportResistance?.supports || []).slice(0, 3);
+  const resistances = (t.supportResistance?.resistances || []).slice(0, 3);
+  const supStr = supports.length > 0 ? supports.map(s => chalk.green(`\u20B9${s.toFixed(0)}`)).join('  ') : '—';
+  const resStr = resistances.length > 0 ? resistances.map(r => chalk.red(`\u20B9${r.toFixed(0)}`)).join('  ') : '—';
+  console.log(`  Support: ${supStr}  ${chalk.gray('|')}  Resistance: ${resStr}`);
+
+  // Line 4: Fibonacci levels (if present)
+  if (t.fibonacci) {
+    const fibParts = [];
+    if (t.fibonacci.level382 != null) fibParts.push(`38.2%=\u20B9${t.fibonacci.level382.toFixed(0)}`);
+    if (t.fibonacci.level500 != null) fibParts.push(`50%=\u20B9${t.fibonacci.level500.toFixed(0)}`);
+    if (t.fibonacci.level618 != null) fibParts.push(`61.8%=\u20B9${t.fibonacci.level618.toFixed(0)}`);
+    if (fibParts.length > 0) {
+      console.log(`  Fib: ${chalk.gray(fibParts.join('  '))}`);
+    }
+  }
+
+  // Line 5: Candlestick patterns (if present)
+  if (t.candlePatterns && t.candlePatterns.length > 0) {
+    const patStr = t.candlePatterns
+      .map(p => `${p.name} (${p.reliability || 'med'})`)
+      .join(', ');
+    console.log(`  Patterns: ${chalk.magenta(patStr)}`);
+  }
+
+  // Line 6: Overall signal with confidence block
   const signal = t.overallSignal;
   const sigColor = signal.includes('BUY') ? chalk.green : signal.includes('SELL') ? chalk.red : chalk.yellow;
-  console.log(chalk.gray(`    Overall: ${sigColor(signal)} (Score: ${t.score}/100)`));
-  if (t.supportResistance.supports.length > 0) {
-    console.log(chalk.gray(`    Support: ${t.supportResistance.supports.slice(0, 3).map(s => '₹' + s.toFixed(0)).join(', ')}`));
-  }
-  if (t.supportResistance.resistances.length > 0) {
-    console.log(chalk.gray(`    Resistance: ${t.supportResistance.resistances.slice(0, 3).map(r => '₹' + r.toFixed(0)).join(', ')}`));
-  }
+  const score = t.score || 0;
+  console.log(`  Signal: ${displayConfidenceBlock(score)} ${sigColor(signal)} (${score}/100)`);
 }
 
 function buildFallbackRecommendation(symbol, quote, technicals) {
