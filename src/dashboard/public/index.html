@@ -337,6 +337,7 @@
   <div style="flex:1"></div>
   <span class="text-dim" style="font-size:0.6rem" id="scan-age"></span>
   <button class="btn btn-sm" onclick="refreshAll()">Refresh</button>
+  <button class="btn btn-sm" onclick="openModal('modal-settings');loadSettings()" title="Settings" style="font-size:0.8rem;padding:4px 10px">&#9881;</button>
   <button class="btn btn-sm" onclick="openModal('modal-shortcuts')" title="Keyboard Shortcuts" style="font-size:0.8rem;padding:4px 10px">?</button>
 </div>
 
@@ -620,6 +621,54 @@
     <div style="text-align:right;margin-top:8px">
       <button class="btn" onclick="closeModal('modal-exit')" style="margin-right:8px">Cancel</button>
       <button class="btn btn-red btn-lg" onclick="confirmExit()" id="btn-confirm-exit">Exit Trade</button>
+    </div>
+  </div>
+</div>
+
+<!-- Settings Modal -->
+<div class="modal-overlay" id="modal-settings">
+  <div class="modal" style="max-width:550px">
+    <div class="modal-title">Agent Settings <button class="modal-close" onclick="closeModal('modal-settings')">&times;</button></div>
+    <div id="settings-msg"></div>
+    <div id="settings-form">
+      <div class="form-row">
+        <div class="form-group"><label>Max Positions</label><input type="number" id="cfg-max-pos" min="1" max="10" step="1"></div>
+        <div class="form-group"><label>Max Capital/Position (%)</label><input type="number" id="cfg-max-cap" min="5" max="50" step="5"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Max Loss/Trade (%)</label><input type="number" id="cfg-max-loss" min="1" max="20" step="1"></div>
+        <div class="form-group"><label>ATR Stop Multiplier</label><input type="number" id="cfg-atr-stop" min="0.5" max="3" step="0.1"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Trailing Stop ATR</label><input type="number" id="cfg-trail-atr" min="0.1" max="2" step="0.1"></div>
+        <div class="form-group"><label>Trailing Trigger (%)</label><input type="number" id="cfg-trail-trigger" min="0.5" max="5" step="0.5"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Risk:Reward T1</label><input type="number" id="cfg-rr-t1" min="1" max="5" step="0.5"></div>
+        <div class="form-group"><label>Risk:Reward T2</label><input type="number" id="cfg-rr-t2" min="1.5" max="8" step="0.5"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>No Entry After (HH:MM)</label><input type="text" id="cfg-no-entry" placeholder="15:00"></div>
+        <div class="form-group"></div>
+      </div>
+      <div style="border-top:1px solid var(--card-border);padding-top:12px;margin-top:8px">
+        <div style="font-size:0.7rem;font-weight:600;color:var(--cyan);margin-bottom:8px">Telegram Alerts</div>
+        <div class="form-row">
+          <div class="form-group"><label>Bot Token</label><input type="text" id="cfg-tg-token" placeholder="123456:ABC-DEF..."></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>Chat ID</label><input type="text" id="cfg-tg-chatid" placeholder="-1001234567890"></div>
+          <div class="form-group" style="display:flex;align-items:flex-end;gap:6px">
+            <button class="btn btn-sm" onclick="saveTelegram()">Connect</button>
+            <button class="btn btn-sm" onclick="testTelegram()">Test</button>
+          </div>
+        </div>
+        <div id="tg-status" style="font-size:0.6rem;color:var(--text-dim);margin-top:4px"></div>
+      </div>
+      <div style="text-align:right;margin-top:16px">
+        <button class="btn" onclick="closeModal('modal-settings')" style="margin-right:8px">Cancel</button>
+        <button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
+      </div>
     </div>
   </div>
 </div>
@@ -1353,6 +1402,67 @@ let _exitTradeId=null;
 function openExitModal(tradeId,symbol,mode){_exitTradeId=tradeId;document.getElementById('exit-form-msg').innerHTML='';document.getElementById('exit-title').innerHTML=`${mode==='partial'?'Partial Exit':'Exit'}: ${symbol} <button class="modal-close" onclick="closeModal('modal-exit')">&times;</button>`;document.getElementById('exit-info').innerHTML=`<div class="text-dim" style="font-size:0.7rem;margin-bottom:8px">Trade #${tradeId} — ${symbol}</div>`;document.getElementById('exit-partial-row').style.display=mode==='partial'?'flex':'none';document.getElementById('exit-pct').value=mode==='partial'?'0.5':'1';document.getElementById('exit-reason').value=mode==='partial'?'Partial exit via UI':'Manual exit via UI';openModal('modal-exit')}
 
 async function confirmExit(){if(!_exitTradeId)return;const btn=document.getElementById('btn-confirm-exit');btn.disabled=true;btn.textContent='Exiting...';const pctVal=parseFloat(document.getElementById('exit-pct').value);const reason=document.getElementById('exit-reason').value;try{if(pctVal>=1){await api(`/api/trades/${_exitTradeId}/exit`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reason})})}else{await api(`/api/trades/${_exitTradeId}/partial-exit`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({percentage:pctVal,reason})})}closeModal('modal-exit');toast(`Trade exited`,'success');loadDashboard();loadRecommendations()}catch(e){document.getElementById('exit-form-msg').innerHTML=`<div class="form-msg error">${e.message}</div>`}btn.disabled=false;btn.textContent='Exit Trade'}
+
+// ── Settings ──
+async function loadSettings() {
+  try {
+    const cfg = await api('/api/agent-config');
+    document.getElementById('cfg-max-pos').value = cfg.maxPositions;
+    document.getElementById('cfg-max-cap').value = cfg.maxCapitalPerPosition;
+    document.getElementById('cfg-max-loss').value = cfg.maxLossPerTrade;
+    document.getElementById('cfg-atr-stop').value = cfg.atrStopMultiplier;
+    document.getElementById('cfg-trail-atr').value = cfg.trailingStopATR;
+    document.getElementById('cfg-trail-trigger').value = cfg.trailingTriggerPct;
+    document.getElementById('cfg-rr-t1').value = cfg.riskRewardT1;
+    document.getElementById('cfg-rr-t2').value = cfg.riskRewardT2;
+    document.getElementById('cfg-no-entry').value = cfg.noNewEntryAfter;
+  } catch (e) { console.error('Load settings:', e); }
+  try {
+    const tg = await api('/api/telegram/status');
+    document.getElementById('tg-status').textContent = tg.configured ? '\u2705 Telegram connected' : '\u274C Not configured';
+    document.getElementById('tg-status').style.color = tg.configured ? 'var(--green)' : 'var(--text-dim)';
+  } catch {}
+}
+
+async function saveSettings() {
+  const cfg = {
+    maxPositions: document.getElementById('cfg-max-pos').value,
+    maxCapitalPerPosition: document.getElementById('cfg-max-cap').value,
+    maxLossPerTrade: document.getElementById('cfg-max-loss').value,
+    atrStopMultiplier: document.getElementById('cfg-atr-stop').value,
+    trailingStopATR: document.getElementById('cfg-trail-atr').value,
+    trailingTriggerPct: document.getElementById('cfg-trail-trigger').value,
+    riskRewardT1: document.getElementById('cfg-rr-t1').value,
+    riskRewardT2: document.getElementById('cfg-rr-t2').value,
+    noNewEntryAfter: document.getElementById('cfg-no-entry').value,
+  };
+  try {
+    await api('/api/agent-config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cfg) });
+    toast('Settings saved', 'success');
+    closeModal('modal-settings');
+  } catch (e) {
+    document.getElementById('settings-msg').innerHTML = `<div class="form-msg error">${e.message}</div>`;
+  }
+}
+
+async function saveTelegram() {
+  const token = document.getElementById('cfg-tg-token').value.trim();
+  const chatId = document.getElementById('cfg-tg-chatid').value.trim();
+  if (!token || !chatId) { toast('Enter bot token and chat ID', 'error'); return; }
+  try {
+    await api('/api/telegram/configure', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token, chatId }) });
+    document.getElementById('tg-status').textContent = '\u2705 Telegram connected';
+    document.getElementById('tg-status').style.color = 'var(--green)';
+    toast('Telegram connected! Check your chat.', 'success');
+  } catch (e) { toast('Telegram setup failed: ' + e.message, 'error'); }
+}
+
+async function testTelegram() {
+  try {
+    await api('/api/telegram/test', { method: 'POST' });
+    toast('Test message sent!', 'success');
+  } catch (e) { toast('Test failed: ' + e.message, 'error'); }
+}
 </script>
 </body>
 </html>
