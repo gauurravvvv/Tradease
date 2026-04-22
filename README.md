@@ -93,7 +93,7 @@ Tradease uses **Claude Code CLI** (`claude`) as its AI engine — spawned as a c
 ## Installation
 
 ```bash
-git clone https://github.com/gauravgoel11/Tradease.git
+git clone https://github.com/gauurravvvv/Tradease.git
 cd Tradease
 npm install
 
@@ -101,21 +101,60 @@ npm install
 npm link
 ```
 
+### First Run
+
+On first run, Tradease automatically:
+- Creates `data/trades.db` (SQLite database)
+- Creates `data/logs/` directory for daily log files
+- Creates `data/backtests/` for backtest result JSON files
+- Runs schema migrations (tables for trades, daily summaries, agent logs, signals, journal)
+
+No manual setup needed — just install and run.
+
+### Environment Variables (Optional)
+
+No `.env` file required. Telegram is the only optional env config:
+
+```bash
+# Optional: set Telegram alerts (or configure via dashboard UI)
+export TELEGRAM_BOT_TOKEN=your_bot_token
+export TELEGRAM_CHAT_ID=your_chat_id
+```
+
+### Timezone
+
+All scheduling and market hours are based on **IST (Indian Standard Time)**. The system detects market sessions automatically:
+- Pre-market: before 9:00 AM IST
+- Pre-open: 9:00 - 9:15 AM IST
+- Market open: 9:15 AM - 3:30 PM IST
+- Post-market: 3:30 - 4:00 PM IST
+
+Agents only run during market hours. The daemon is safe to leave running 24x7 — it does nothing outside market hours.
+
 ## Quick Start
 
 ```bash
-# Just start everything (daemon + dashboard + agents)
+# Option 1: Full autonomous mode (daemon + agents + scheduled tasks)
 tradease daemon
 
-# Dashboard at http://localhost:3777
+# Option 2: Dashboard only (manual trading via UI)
+tradease dashboard
+# Open http://localhost:3777
+
+# Option 3: Run both (2 terminals)
+# Terminal 1:
+tradease daemon
+# Terminal 2:
 tradease dashboard
 
-# Or explore individual commands
+# Option 4: Explore individual commands
 tradease scan              # Pre-market scan
 tradease research RELIANCE # Quick analysis
 tradease pulse             # Market status
 tradease news              # News + sentiment
 ```
+
+> **Note**: `tradease daemon` does NOT start the web dashboard. Run `tradease dashboard` separately if you want the UI.
 
 ---
 
@@ -288,6 +327,46 @@ Tradease/
 
 ---
 
+## Telegram Alerts Setup
+
+Get instant trade notifications on your phone:
+
+1. **Create a Telegram Bot**: Message [@BotFather](https://t.me/BotFather) on Telegram, send `/newbot`, follow prompts. Copy the **bot token**.
+2. **Get your Chat ID**: Message [@userinfobot](https://t.me/userinfobot) on Telegram. Copy the **chat ID**.
+3. **Configure** (pick one):
+   - **Dashboard UI**: Go to Telegram Setup section, paste token + chat ID, click Configure
+   - **Environment**: `export TELEGRAM_BOT_TOKEN=xxx` and `export TELEGRAM_CHAT_ID=xxx`
+
+Alerts fire on: trade entry, exit, stop-loss, target hits, index crash, daily summary.
+
+---
+
+## Data Storage
+
+All data is local — nothing leaves your machine (except Claude CLI calls and Yahoo Finance/RSS fetches).
+
+| Data | Location | Auto-managed |
+|------|----------|-------------|
+| Trades database | `data/trades.db` | Auto-created, SQLite |
+| Daily logs | `data/logs/YYYY-MM-DD.log` | Auto-rotated, cleaned after 30 days |
+| Backtest results | `data/backtests/*.json` | Auto-pruned, keeps last 20 |
+
+---
+
+## Configuration
+
+All settings live in `src/config/settings.js`. Edit directly or tune from the dashboard UI (Agent Config section).
+
+Key settings you might want to change:
+- `VIRTUAL_CAPITAL` — starting paper capital (default: ₹2,00,000)
+- `MAX_POSITIONS` — concurrent trades (default: 3)
+- `ATR_STOP_MULTIPLIER` — stop-loss tightness (default: 1.5x ATR)
+- `MIN_CONFIDENCE` — minimum AI confidence to show trade (default: 70)
+
+Settings changed via dashboard UI are **in-memory only** — they reset on restart. For permanent changes, edit `settings.js`.
+
+---
+
 ## Tech Stack
 
 | Component | Technology |
@@ -313,6 +392,12 @@ npm test
 ```
 
 64 tests across 4 suites — risk calculations, options pricing, screener scoring, AI response parsing.
+
+---
+
+## Disclaimer
+
+This is a **paper trading system for educational and research purposes only**. It does not execute real trades or connect to any broker. No real money is at risk. The AI-generated recommendations are not financial advice. Past performance in backtesting does not guarantee future results. Always do your own research before trading with real capital.
 
 ---
 
