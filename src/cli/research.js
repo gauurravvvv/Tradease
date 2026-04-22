@@ -372,17 +372,19 @@ function displayTechnicalsSummary(t) {
   // Line 4: Fibonacci levels (if present)
   if (t.fibonacci) {
     const fibParts = [];
-    if (t.fibonacci.level382 != null) fibParts.push(`38.2%=\u20B9${t.fibonacci.level382.toFixed(0)}`);
-    if (t.fibonacci.level500 != null) fibParts.push(`50%=\u20B9${t.fibonacci.level500.toFixed(0)}`);
-    if (t.fibonacci.level618 != null) fibParts.push(`61.8%=\u20B9${t.fibonacci.level618.toFixed(0)}`);
+    const fl = t.fibonacci.levels || {};
+    if (fl['0.236'] != null) fibParts.push(`23.6%=₹${fl['0.236'].toFixed(0)}`);
+    if (fl['0.382'] != null) fibParts.push(`38.2%=₹${fl['0.382'].toFixed(0)}`);
+    if (fl['0.5'] != null) fibParts.push(`50%=₹${fl['0.5'].toFixed(0)}`);
+    if (fl['0.618'] != null) fibParts.push(`61.8%=₹${fl['0.618'].toFixed(0)}`);
     if (fibParts.length > 0) {
       console.log(`  Fib: ${chalk.gray(fibParts.join('  '))}`);
     }
   }
 
   // Line 5: Candlestick patterns (if present)
-  if (t.candlePatterns && t.candlePatterns.length > 0) {
-    const patStr = t.candlePatterns
+  if (t.candlestickPatterns && t.candlestickPatterns.length > 0) {
+    const patStr = t.candlestickPatterns
       .map(p => `${p.name} (${p.reliability || 'med'})`)
       .join(', ');
     console.log(`  Patterns: ${chalk.magenta(patStr)}`);
