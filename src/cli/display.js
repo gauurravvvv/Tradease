@@ -276,7 +276,22 @@ export function displayTradeCard(trade, index = 1) {
     (maxLoss ? `  ${chalk.gray('|')}  ${chalk.gray('Max Loss:')} ${chalk.red(maxLoss)}` : '');
   lines.push(`  ${slLine}`);
 
-  // Line 5: Fundamentals (PE, 52W, MCap) — only if data present
+  // Line 5: Sector tag — compact inline
+  const sectorParts = [];
+  if (trade.sector) sectorParts.push(trade.sector);
+  if (trade.sectorRank != null) sectorParts.push(`#${trade.sectorRank}`);
+  if (trade.sectorTrend) {
+    const trendIcon = trade.sectorTrend.includes('up') ? '↑' : trade.sectorTrend.includes('down') ? '↓' : '→';
+    sectorParts.push(trendIcon);
+  }
+  if (sectorParts.length > 0) {
+    const sectorColor = trade.sectorTrend?.includes('up') ? chalk.green
+      : trade.sectorTrend?.includes('down') ? chalk.red
+      : chalk.gray;
+    lines.push(`  ${chalk.gray('Sector:')} ${sectorColor(sectorParts.join(' '))}`);
+  }
+
+  // Line 6: Fundamentals (PE, 52W, MCap) — only if data present
   const fundParts = [];
   if (trade.pe != null) fundParts.push(`PE: ${trade.pe}`);
   if (trade.week52Low != null && trade.week52High != null) {
@@ -459,7 +474,64 @@ export function displayMarketPulse(indexData) {
  * ║  NIFTY: 24,416 (-0.65%)  |  BANKNIFTY: 57,320 (-0.09%) ║
  * ╚══════════════════════════════════════════════════════════╝
  */
-export function displayMorningBrief(recommendations, globalCues) {
+/**
+ * Display FII/DII summary bar — compact one-liner.
+ * Input: fiiDiiData object from getFiiDiiData().
+ * Returns formatted string or null.
+ */
+export function displayFiiDiiBar(fiiDiiData) {
+  if (!fiiDiiData) return null;
+
+  const fiiNet = fiiDiiData.fii?.netValue;
+  const diiNet = fiiDiiData.dii?.netValue;
+  const sentiment = fiiDiiData.sentiment;
+
+  const fmtCr = (val) => {
+    if (val == null || isNaN(val)) return 'N/A';
+    const sign = val >= 0 ? '+' : '';
+    return `${sign}₹${Math.abs(val).toLocaleString('en-IN')} Cr`;
+  };
+
+  const fiiLabel = fiiDiiData.fii?.signal === 'BUYING' ? chalk.green('buying')
+    : fiiDiiData.fii?.signal === 'SELLING' ? chalk.red('selling')
+    : chalk.gray('neutral');
+  const diiLabel = fiiDiiData.dii?.signal === 'BUYING' ? chalk.green('buying')
+    : fiiDiiData.dii?.signal === 'SELLING' ? chalk.red('selling')
+    : chalk.gray('neutral');
+
+  const fiiStr = fiiNet != null ? (fiiNet >= 0 ? chalk.green(fmtCr(fiiNet)) : chalk.red(fmtCr(fiiNet))) : chalk.gray('N/A');
+  const diiStr = diiNet != null ? (diiNet >= 0 ? chalk.green(fmtCr(diiNet)) : chalk.red(fmtCr(diiNet))) : chalk.gray('N/A');
+
+  const sentColor = sentiment === 'BULLISH' ? chalk.green : sentiment === 'BEARISH' ? chalk.red : chalk.yellow;
+
+  return `${chalk.white('FII:')} ${fiiStr}(${fiiLabel}) ${chalk.gray('|')} ${chalk.white('DII:')} ${diiStr}(${diiLabel}) ${chalk.gray('|')} ${sentColor(sentiment)}`;
+}
+
+/**
+ * Display sector strength summary — top 3 + bottom 3.
+ * Input: sectorData array from getSectorStrength().
+ * Returns formatted string or null.
+ */
+export function displaySectorBar(sectorData) {
+  if (!sectorData || sectorData.length === 0) return null;
+
+  const sorted = [...sectorData].sort((a, b) => (b.momentumScore || 0) - (a.momentumScore || 0));
+  const top3 = sorted.slice(0, 3);
+  const bot3 = sorted.slice(-3).reverse();
+
+  const fmtSector = (s) => {
+    const name = s.sector?.replace('Nifty ', '') || '?';
+    const pct = s.todayChange != null ? `${s.todayChange >= 0 ? '+' : ''}${s.todayChange.toFixed(1)}%` : '';
+    return pct ? `${name}(${pct})` : name;
+  };
+
+  const hotStr = top3.map(s => chalk.green(fmtSector(s))).join(' ');
+  const coldStr = bot3.map(s => chalk.red(fmtSector(s))).join(' ');
+
+  return `${chalk.white('HOT:')} ${hotStr}  ${chalk.gray('|')}  ${chalk.white('COLD:')} ${coldStr}`;
+}
+
+export function displayMorningBrief(recommendations, globalCues, fiiDiiData, sectorData) {
   const now = new Date();
   const dateStr = now.toLocaleDateString('en-IN', {
     day: '2-digit',
@@ -481,6 +553,19 @@ export function displayMorningBrief(recommendations, globalCues) {
     headerLines.push(chalk.gray('  ' + '\u2500'.repeat(55)));
     const cueLines = displayGlobalCuesBar(globalCues);
     headerLines.push(...cueLines);
+  }
+
+  // FII/DII flow
+  const fiiBar = displayFiiDiiBar(fiiDiiData);
+  if (fiiBar) {
+    headerLines.push(chalk.gray('  ' + '\u2500'.repeat(55)));
+    headerLines.push('  ' + fiiBar);
+  }
+
+  // Sector rotation
+  const secBar = displaySectorBar(sectorData);
+  if (secBar) {
+    headerLines.push('  ' + secBar);
   }
 
   // Index prices section — extract from globalCues or just show separator

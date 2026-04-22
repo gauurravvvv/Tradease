@@ -2,17 +2,19 @@
 
 import { Command } from 'commander';
 import chalk from 'chalk';
-import { runScan } from './cli/scan.js';
+import { runScan, autoExecuteTrades } from './cli/scan.js';
 import { runResearch } from './cli/research.js';
-import { showPortfolio, showTrades } from './cli/portfolio.js';
+import { showPortfolio, showTrades, showHistory } from './cli/portfolio.js';
 import { displayHeader, displayMarketPulse, formatCurrency } from './cli/display.js';
 import { createScheduler } from './scheduler/cron.js';
 import { ListenerManager } from './listeners/manager.js';
 import { checkIndexHealth } from './listeners/index-monitor.js';
 import { getOpenTrades, exitTrade } from './trading/manager.js';
-import { getPortfolioSummary } from './trading/portfolio.js';
+import { getPortfolioSummary, saveDailySummary, getPerformanceStats } from './trading/portfolio.js';
 import { getDb, closeDb } from './db/sqlite.js';
 import { SCHEDULE } from './config/settings.js';
+import { logger, cleanOldLogs } from './utils/logger.js';
+import { notifyScanComplete, notifyDaemonStart, notifyDaemonStop, notifyDailySummary } from './utils/notify.js';
 
 const program = new Command();
 
@@ -95,6 +97,21 @@ program
     }
   });
 
+// ─── history ────────────────────────────────────────────────────────────────
+program
+  .command('history')
+  .description('Show closed trades + win rate + performance stats')
+  .option('-d, --days <number>', 'Look back N days', '30')
+  .action(async (opts) => {
+    try {
+      getDb();
+      await showHistory(parseInt(opts.days, 10));
+    } catch (err) {
+      console.error(chalk.red(`History failed: ${err.message}`));
+      process.exit(1);
+    }
+  });
+
 // ─── exit ───────────────────────────────────────────────────────────────────
 program
   .command('exit <symbol>')
@@ -169,21 +186,35 @@ program
 
       displayHeader('TradeOracle Daemon', 'Starting all schedulers and monitors...');
 
+      // Clean old log files on startup
+      cleanOldLogs(30);
+
       // Build handler stubs — these wire to actual functions
       const handlers = {
         preMarketScan: async () => {
-          console.log('[daemon] Pre-market scan starting...');
-          await runScan({ interactive: false });
+          logger.info('[daemon] Pre-market scan starting...');
+          const recs = await runScan({ interactive: false });
+          notifyScanComplete(Array.isArray(recs) ? recs.length : 0);
         },
         marketOpenCheck: async () => {
-          console.log('[daemon] Market open check...');
+          logger.info('[daemon] Market open check...');
           const indexData = await checkIndexHealth();
           displayMarketPulse(indexData);
         },
         tradeExecution: async () => {
-          console.log('[daemon] Trade execution window...');
-          // Auto-execute if scan produced recommendations with high confidence
-          // Actual logic would come from trading/manager.js
+          logger.info('[daemon] Trade execution window...');
+          try {
+            const recommendations = await runScan({ interactive: false });
+            if (Array.isArray(recommendations) && recommendations.length > 0) {
+              notifyScanComplete(recommendations.length);
+              const entered = autoExecuteTrades(recommendations, 60);
+              logger.info(`[daemon] Auto-executed ${entered.length} trade(s)`);
+            } else {
+              logger.info('[daemon] No recommendations to execute.');
+            }
+          } catch (err) {
+            logger.error(`[daemon] Trade execution failed: ${err.message}`);
+          }
         },
         marketPulse: async () => {
           const indexData = await checkIndexHealth();
@@ -196,11 +227,11 @@ program
           // Handled by ListenerManager tick(), this is for cron logging
         },
         windDown: async () => {
-          console.log('[daemon] Wind-down: preparing to close positions...');
+          logger.info('[daemon] Wind-down: preparing to close positions...');
           const { getQuote } = await import('./data/market.js');
           const openTrades = getOpenTrades();
           for (const t of openTrades) {
-            console.log(`[daemon] End-of-day exit: ${t.symbol}`);
+            logger.info(`[daemon] End-of-day exit: ${t.symbol}`);
             try {
               let exitPrice = t.current_price || t.entry_price;
               try {
@@ -209,14 +240,23 @@ program
               } catch { /* use last known */ }
               exitTrade(t.id, exitPrice, 'End-of-day wind-down');
             } catch (err) {
-              console.error(`[daemon] Wind-down exit failed for ${t.symbol}: ${err.message}`);
+              logger.error(`[daemon] Wind-down exit failed for ${t.symbol}: ${err.message}`);
             }
           }
         },
         postMarket: async () => {
-          console.log('[daemon] Post-market summary...');
+          logger.info('[daemon] Post-market summary...');
+          try {
+            saveDailySummary();
+            logger.info('[daemon] Daily summary saved to DB');
+          } catch (err) {
+            logger.error(`[daemon] saveDailySummary failed: ${err.message}`);
+          }
           const portfolio = getPortfolioSummary();
-          console.log(`[daemon] Capital: ${formatCurrency(portfolio.totalCapital)} | P&L today: ${formatCurrency(portfolio.unrealizedPnl)}`);
+          const stats = getPerformanceStats(30);
+          logger.info(`[daemon] Capital: ${formatCurrency(portfolio.totalCapital)} | Unrealized: ${formatCurrency(portfolio.unrealizedPnl)}`);
+          logger.info(`[daemon] 30d stats: ${stats.totalTrades} trades | Win: ${stats.winRate}% | P&L: ${formatCurrency(stats.totalPnl)}`);
+          notifyDailySummary(stats.totalPnl || 0, stats.winRate || 0, stats.totalTrades || 0);
         },
       };
 
@@ -241,13 +281,17 @@ program
       console.log(chalk.green.bold('  TradeOracle daemon running...'));
       console.log(chalk.gray('  Press Ctrl+C to stop.\n'));
 
+      notifyDaemonStart();
+      logger.info('[daemon] All schedulers and monitors started.');
+
       // Graceful shutdown
       const shutdown = (signal) => {
-        console.log(`\n[daemon] Received ${signal}. Shutting down...`);
+        logger.info(`[daemon] Received ${signal}. Shutting down...`);
         scheduler.stop();
         listeners.stop();
         closeDb();
-        console.log('[daemon] Shutdown complete.');
+        notifyDaemonStop();
+        logger.info('[daemon] Shutdown complete.');
         process.exit(0);
       };
 
@@ -255,7 +299,7 @@ program
       process.on('SIGTERM', () => shutdown('SIGTERM'));
 
     } catch (err) {
-      console.error(chalk.red(`Daemon failed: ${err.message}`));
+      logger.error(`Daemon failed: ${err.message}`);
       closeDb();
       process.exit(1);
     }

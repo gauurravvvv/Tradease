@@ -1,4 +1,6 @@
 node_modules/
 data/trades.db
+data/logs/
+.env
+*.db-journal
 .DS_Store
-*.log

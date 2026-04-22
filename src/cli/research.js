@@ -4,8 +4,11 @@ import { getOptionsChain, getNearestExpiry, getATMStrike } from '../data/options
 import { analyzeStockQuick, analyzeStockDeep } from '../analysis/claude.js';
 import { analyzeTechnicals } from '../analysis/technicals.js';
 import { calculateStopLoss, calculateTargets } from '../trading/risk.js';
+import { getFiiDiiData } from '../data/fii-dii.js';
+import { getGlobalCues } from '../data/global-cues.js';
+import { getSectorForStock } from '../analysis/sectors.js';
 import {
-  displayHeader, displayTradeCard, formatCurrency, formatPercent,
+  displayHeader, displayTradeCard, displayFiiDiiBar, formatCurrency, formatPercent,
   formatMarketCap, formatVolume, displayConfidenceBlock,
 } from './display.js';
 import ora from 'ora';
@@ -111,18 +114,24 @@ async function runDeepResearch(symbol) {
 
   const spinner = ora('Fetching comprehensive data...').start();
 
-  let quote, history, news, options;
+  let quote, history, news, options, fiiDiiData, globalCues, sectorCtx;
   try {
     const results = await Promise.allSettled([
       getQuote(symbol),
       getHistorical(symbol, 90),
       getStockNews(symbol),
       getOptionsChain(symbol),
+      getFiiDiiData(),
+      getGlobalCues(),
+      getSectorForStock(symbol),
     ]);
     quote = results[0].status === 'fulfilled' ? results[0].value : null;
     history = results[1].status === 'fulfilled' ? results[1].value : [];
     news = results[2].status === 'fulfilled' ? results[2].value : [];
     options = results[3].status === 'fulfilled' ? results[3].value : null;
+    fiiDiiData = results[4].status === 'fulfilled' ? results[4].value : null;
+    globalCues = results[5].status === 'fulfilled' ? results[5].value : null;
+    sectorCtx = results[6].status === 'fulfilled' ? results[6].value : null;
 
     if (!quote) {
       spinner.fail('Could not fetch quote data');
@@ -147,6 +156,25 @@ async function runDeepResearch(symbol) {
     displayOptionsSnapshot(options);
   }
 
+  // Show market context
+  if (fiiDiiData || globalCues) {
+    console.log(chalk.bold.white('\n  MARKET CONTEXT ') + chalk.gray('\u2500'.repeat(36)));
+    if (fiiDiiData) {
+      const fiiBar = displayFiiDiiBar(fiiDiiData);
+      if (fiiBar) console.log(`  ${fiiBar}`);
+    }
+    if (globalCues) {
+      const sentColor = globalCues.sentiment === 'BULLISH' ? chalk.green
+        : globalCues.sentiment === 'BEARISH' ? chalk.red : chalk.yellow;
+      console.log(`  Global: ${sentColor(globalCues.sentiment)} (score: ${globalCues.sentimentScore})`);
+    }
+    if (sectorCtx) {
+      const trendColor = sectorCtx.trend?.includes('up') ? chalk.green
+        : sectorCtx.trend?.includes('down') ? chalk.red : chalk.yellow;
+      console.log(`  Sector: ${chalk.white(sectorCtx.sector)} #${sectorCtx.rank} ${trendColor(sectorCtx.trend || '—')} (mom: ${sectorCtx.momentumScore})`);
+    }
+  }
+
   // Show recent news
   if (news.length > 0) {
     console.log(chalk.bold.white('\n  News Feed:'));
@@ -165,6 +193,11 @@ async function runDeepResearch(symbol) {
     } catch (e) { /* skip if fails */ }
   }
 
+  // Build sector context string for AI
+  const sectorStr = sectorCtx
+    ? `${sectorCtx.sector} rank #${sectorCtx.rank}, trend: ${sectorCtx.trend}, momentum: ${sectorCtx.momentumScore}`
+    : null;
+
   // Deep AI analysis
   const aiSpinner = ora('Running deep AI analysis...').start();
   try {
@@ -177,7 +210,9 @@ async function runDeepResearch(symbol) {
       history90d: history,
       optionsChain: options,
       news: news.map(n => ({ title: n.title, summary: n.snippet })),
-      sectorContext: null,
+      sectorContext: sectorStr,
+      fiiDii: fiiDiiData ? fiiDiiData.summary : null,
+      globalSentiment: globalCues ? `${globalCues.sentiment} (${globalCues.sentimentScore})` : null,
     });
 
     aiSpinner.succeed('Deep analysis complete');
@@ -188,9 +223,15 @@ async function runDeepResearch(symbol) {
       console.log(chalk.bold.white('\n  AI Deep Recommendation:'));
       displayTradeCard({ symbol, ...analysis }, 1);
 
-      if (analysis.detailedAnalysis) {
-        console.log(chalk.bold.white('\n  Detailed Analysis:'));
-        console.log(chalk.gray(`  ${analysis.detailedAnalysis}`));
+      if (analysis.reasoning) {
+        console.log(chalk.bold.white('\n  Analysis:'));
+        console.log(chalk.gray(`  ${analysis.reasoning}`));
+      }
+      if (analysis.riskFactors && analysis.riskFactors.length > 0) {
+        console.log(chalk.bold.red('\n  Risk Factors:'));
+        for (const rf of analysis.riskFactors) {
+          console.log(chalk.yellow(`    • ${rf}`));
+        }
       }
       return analysis;
     } else {

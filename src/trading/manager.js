@@ -6,6 +6,8 @@ import {
   calculatePositionSize,
   validateTrade,
 } from './risk.js';
+import { logger } from '../utils/logger.js';
+import { notifyTradeEntry, notifyTradeExit, notifyStopLoss } from '../utils/notify.js';
 
 // ---------------------------------------------------------------------------
 // Enter a new trade
@@ -45,53 +47,33 @@ export function enterTrade({
 }) {
   const db = getDb();
 
-  // ---- validation ----
-  const validation = validateTrade({
-    symbol,
-    type,
-    entryPrice,
-    premium,
-    lotSize,
-    stopLoss,
-    target1,
-    target2,
-    confidence,
-  });
+  // ---- check available capital + positions ----
+  const openCapitalRow = db
+    .prepare('SELECT COALESCE(SUM(capital_used), 0) AS total FROM trades WHERE status = ?')
+    .get('OPEN');
+  const openCapital = openCapitalRow.total;
+  const available = TRADING.VIRTUAL_CAPITAL - openCapital;
+
+  const openTrades = db.prepare('SELECT * FROM trades WHERE status = ?').all('OPEN');
+
+  // ---- validation via risk module ----
+  const optionPrice = premium || entryPrice;
+  const positionSize = calculatePositionSize(available, optionPrice, lotSize);
+
+  const validation = validateTrade(
+    { symbol, capitalRequired: positionSize.capitalRequired, maxLoss: positionSize.maxLoss, type },
+    { positions: openTrades, capitalUsed: openCapital, totalCapital: TRADING.VIRTUAL_CAPITAL }
+  );
 
   if (!validation.valid) {
-    throw new Error(`Trade validation failed: ${validation.errors.join('; ')}`);
+    throw new Error(`Trade validation failed: ${validation.reason}`);
   }
 
-  // ---- position sizing ----
-  const positionSize = calculatePositionSize({
-    entryPrice,
-    stopLoss,
-    lotSize,
-    premium,
-  });
+  const quantity = positionSize.lots;
+  const capitalUsed = optionPrice * lotSize * quantity;
 
-  const quantity = positionSize.quantity;
-  const capitalUsed = premium * lotSize * quantity;
-
-  // ---- check available capital ----
-  const openCapital = db
-    .prepare('SELECT COALESCE(SUM(capital_used), 0) AS total FROM trades WHERE status = ?')
-    .get('OPEN').total;
-
-  const available = TRADING.VIRTUAL_CAPITAL - openCapital;
-  if (capitalUsed > available) {
-    throw new Error(
-      `Insufficient capital. Need ${capitalUsed.toFixed(2)}, available ${available.toFixed(2)}`
-    );
-  }
-
-  // ---- check max positions ----
-  const openCount = db
-    .prepare('SELECT COUNT(*) AS cnt FROM trades WHERE status = ?')
-    .get('OPEN').cnt;
-
-  if (openCount >= TRADING.MAX_POSITIONS) {
-    throw new Error(`Maximum open positions (${TRADING.MAX_POSITIONS}) reached.`);
+  if (quantity < 1) {
+    throw new Error(`Insufficient capital for even 1 lot. Need ₹${(optionPrice * lotSize).toFixed(0)}, available ₹${available.toFixed(0)}`);
   }
 
   // ---- insert ----
@@ -121,7 +103,10 @@ export function enterTrade({
     strike,
   });
 
-  return db.prepare('SELECT * FROM trades WHERE id = ?').get(result.lastInsertRowid);
+  const newTrade = db.prepare('SELECT * FROM trades WHERE id = ?').get(result.lastInsertRowid);
+  logger.trade(`ENTER ${type} ${symbol} @ ₹${entryPrice} | SL: ₹${stopLoss} | T1: ₹${target1} | T2: ₹${target2} | Lots: ${quantity}`);
+  notifyTradeEntry(symbol, type, entryPrice);
+  return newTrade;
 }
 
 // ---------------------------------------------------------------------------
@@ -159,6 +144,8 @@ export function exitTrade(tradeId, exitPrice, reason) {
     WHERE id = @id
   `).run({ id: tradeId, exitPrice, pnl, reason });
 
+  logger.trade(`EXIT ${trade.type} ${trade.symbol} @ ₹${exitPrice} | P&L: ₹${pnl.toFixed(0)} | ${reason}`);
+  notifyTradeExit(trade.symbol, trade.type, exitPrice, pnl);
   return db.prepare('SELECT * FROM trades WHERE id = ?').get(tradeId);
 }
 
@@ -280,6 +267,8 @@ export function stopTrade(tradeId, currentPrice) {
     WHERE id = @id
   `).run({ id: tradeId, exitPrice: currentPrice, pnl });
 
+  logger.trade(`STOP ${trade.type} ${trade.symbol} @ ₹${currentPrice} | P&L: ₹${pnl.toFixed(0)}`);
+  notifyStopLoss(trade.symbol, currentPrice);
   return db.prepare('SELECT * FROM trades WHERE id = ?').get(tradeId);
 }
 

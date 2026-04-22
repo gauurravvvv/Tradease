@@ -1,4 +1,4 @@
-import { getOpenTrades } from '../trading/manager.js';
+import { getOpenTrades, getTradeHistory } from '../trading/manager.js';
 import { getPortfolioSummary, getPerformanceStats } from '../trading/portfolio.js';
 import { getQuote } from '../data/market.js';
 import { displayHeader, displayPortfolioTable, displayTradesTable, formatCurrency, formatPercent } from './display.js';
@@ -79,6 +79,74 @@ export async function showTrades() {
 
   console.log(`  Total Unrealized P&L: ${pnlColor(formatCurrency(totalPnl))} (${formatPercent(pnlPct)})`);
   console.log(`  Positions: ${tradesWithPrices.length}\n`);
+}
+
+/**
+ * Show trade history with performance stats.
+ * @param {number} days - Look back N days (default 30)
+ */
+export async function showHistory(days = 30) {
+  displayHeader('Trade History', `Last ${days} days`);
+
+  // Performance stats
+  const stats = getPerformanceStats(days);
+  if (stats) {
+    displayPerformanceStats(stats);
+  }
+
+  // Closed/stopped trades
+  const history = getTradeHistory(days);
+  if (history.length === 0) {
+    console.log(chalk.gray('\n  No closed trades in this period.\n'));
+    return;
+  }
+
+  const table = new Table({
+    head: [
+      chalk.cyan('Date'),
+      chalk.cyan('Symbol'),
+      chalk.cyan('Type'),
+      chalk.cyan('Entry'),
+      chalk.cyan('Exit'),
+      chalk.cyan('P&L'),
+      chalk.cyan('Status'),
+      chalk.cyan('Reason'),
+    ],
+    style: { head: [], border: ['gray'] },
+    colWidths: [12, 14, 6, 10, 10, 14, 9, 24],
+  });
+
+  for (const t of history) {
+    const exitDate = t.exited_at ? new Date(t.exited_at).toLocaleDateString('en-IN') : '—';
+    const pnl = t.pnl || 0;
+    const pnlStr = formatCurrency(pnl);
+    const pnlColored = pnl >= 0 ? chalk.green(pnlStr) : chalk.red(pnlStr);
+    const typeStr = t.type === 'CALL' ? chalk.green(t.type) : chalk.red(t.type);
+    const statusColor = t.status === 'CLOSED' ? chalk.green : chalk.red;
+    const reason = (t.exit_reason || '').slice(0, 22);
+
+    table.push([
+      exitDate,
+      chalk.white(t.symbol),
+      typeStr,
+      formatCurrency(t.entry_price),
+      formatCurrency(t.exit_price || 0),
+      pnlColored,
+      statusColor(t.status),
+      chalk.gray(reason),
+    ]);
+  }
+
+  console.log(chalk.bold.white(`\n  ${history.length} Closed Trade(s):\n`));
+  console.log(table.toString());
+
+  // Win/loss summary line
+  const wins = history.filter(t => (t.pnl || 0) > 0).length;
+  const losses = history.filter(t => (t.pnl || 0) < 0).length;
+  const totalPnl = history.reduce((sum, t) => sum + (t.pnl || 0), 0);
+  const pnlColor = totalPnl >= 0 ? chalk.green : chalk.red;
+
+  console.log(`  ${chalk.green(`W: ${wins}`)} | ${chalk.red(`L: ${losses}`)} | Net P&L: ${pnlColor(formatCurrency(totalPnl))}\n`);
 }
 
 // ---------------------------------------------------------------------------

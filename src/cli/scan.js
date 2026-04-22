@@ -1,11 +1,18 @@
 import { screenStocks } from '../analysis/screener.js';
 import { analyzeStocksForTrading } from '../analysis/claude.js';
-import { displayMorningBrief, displayHeader } from './display.js';
+import { displayMorningBrief, displayHeader, displayTradeCard, formatCurrency } from './display.js';
 import { calculateStopLoss, calculateTargets, calculatePositionSize } from '../trading/risk.js';
 import { getPortfolioSummary } from '../trading/portfolio.js';
+import { enterTrade } from '../trading/manager.js';
 import { getNearestExpiry, getATMStrike } from '../data/options.js';
+import { getFiiDiiData } from '../data/fii-dii.js';
+import { getSectorStrength } from '../analysis/sectors.js';
+import { getGlobalCues } from '../data/global-cues.js';
+import chalk from 'chalk';
 import ora from 'ora';
 import inquirer from 'inquirer';
+import { logger } from '../utils/logger.js';
+import { notifyScanComplete } from '../utils/notify.js';
 
 /**
  * Run pre-market scan: screen stocks, AI analysis, display brief.
@@ -37,12 +44,25 @@ export async function runScan(options = {}) {
     return [];
   }
 
-  // Step 2: AI analysis
+  // Step 2: Fetch context data (cached from screening — no extra API calls)
+  const [fiiDiiData, sectorData, globalCues] = await Promise.all([
+    getFiiDiiData().catch(() => null),
+    getSectorStrength().catch(() => []),
+    getGlobalCues().catch(() => null),
+  ]);
+
+  // Step 3: AI analysis with full market context
   const aiSpinner = ora(`AI analyzing top ${screened.length} candidates...`).start();
   let recommendations;
 
   try {
-    const analysis = await analyzeStocksForTrading(screened);
+    const analysis = await analyzeStocksForTrading(screened, {
+      fiiDii: fiiDiiData,
+      globalCues,
+      sectorRotation: sectorData.length > 0
+        ? `Top: ${sectorData.slice(0, 3).map(s => s.sector).join(', ')} | Bottom: ${sectorData.slice(-3).map(s => s.sector).join(', ')}`
+        : null,
+    });
     const merged = mergeRecommendations(screened, analysis);
     // If AI returned useful data, use it; otherwise fall back to technicals
     const hasAiData = merged.some(r => r.stop_loss && r.target1);
@@ -58,16 +78,107 @@ export async function runScan(options = {}) {
     recommendations = enrichFromTechnicals(screened);
   }
 
-  // Step 3: Display morning brief
-  displayMorningBrief(recommendations, null);
+  // Step 4: Display morning brief
+  displayMorningBrief(recommendations, globalCues, fiiDiiData, sectorData);
+  notifyScanComplete(recommendations.length);
 
-  // Step 4: Interactive prompt
+  // Step 5: Interactive prompt
   if (interactive && recommendations.length > 0) {
     const action = await promptAction(recommendations);
-    return { recommendations, action };
+    await handleAction(action, recommendations);
   }
 
   return recommendations;
+}
+
+/**
+ * Execute trades from scan results.
+ * Handles: execute_all, execute_one, deep, skip.
+ */
+async function handleAction(action, recommendations) {
+  if (!action || action.type === 'skip') {
+    console.log(chalk.gray('\n  Skipped. No trades entered.\n'));
+    return;
+  }
+
+  if (action.type === 'deep') {
+    const { runResearch } = await import('./research.js');
+    await runResearch(action.symbol, 'deep');
+    return;
+  }
+
+  const toExecute = action.type === 'execute_all'
+    ? recommendations.filter(r => r.type === 'CALL' || r.type === 'PUT')
+    : action.type === 'execute_one'
+      ? [action.recommendation]
+      : [];
+
+  if (toExecute.length === 0) {
+    console.log(chalk.yellow('\n  No executable trades (all NEUTRAL).\n'));
+    return;
+  }
+
+  console.log(chalk.bold.white(`\n  Executing ${toExecute.length} trade(s)...\n`));
+
+  for (const rec of toExecute) {
+    try {
+      const trade = executeTrade(rec);
+      console.log(chalk.green(`  ✓ Entered ${trade.type} ${trade.symbol} @ ₹${trade.entry_price} | SL: ₹${trade.stop_loss} | Capital: ${formatCurrency(trade.capital_used)}`));
+    } catch (err) {
+      console.log(chalk.red(`  ✗ ${rec.symbol}: ${err.message}`));
+    }
+  }
+
+  // Show updated portfolio
+  const portfolio = getPortfolioSummary();
+  console.log(chalk.gray(`\n  Capital: ${formatCurrency(portfolio.availableCapital)} available | ${portfolio.openPositions} position(s) open\n`));
+}
+
+/**
+ * Convert a scan recommendation into an enterTrade() call.
+ */
+/**
+ * Auto-execute top recommendations — used by daemon mode.
+ * Only enters trades with confidence >= minConfidence and type !== NEUTRAL.
+ * @param {Array} recommendations
+ * @param {number} [minConfidence=60]
+ * @returns {Array} Entered trades
+ */
+export function autoExecuteTrades(recommendations, minConfidence = 60) {
+  const eligible = (recommendations || [])
+    .filter(r => r.type !== 'NEUTRAL' && (r.confidence || 0) >= minConfidence);
+
+  const entered = [];
+  for (const rec of eligible) {
+    try {
+      const trade = executeTrade(rec);
+      logger.trade(`[auto-trade] Entered ${trade.type} ${trade.symbol} @ ₹${trade.entry_price} | Conf: ${rec.confidence}%`);
+      entered.push(trade);
+    } catch (err) {
+      logger.warn(`[auto-trade] Skip ${rec.symbol}: ${err.message}`);
+    }
+  }
+  return entered;
+}
+
+function executeTrade(rec) {
+  const premium = rec.premium || Math.round((rec.entry_price || rec.price) * 0.02);
+  const entryPrice = rec.entry_price || rec.price;
+
+  return enterTrade({
+    symbol: rec.symbol,
+    type: rec.type,
+    entryPrice,
+    premium,
+    lotSize: rec.lotSize,
+    stopLoss: rec.stop_loss,
+    target1: rec.target1,
+    target2: rec.target2,
+    confidence: rec.confidence || 50,
+    reason: rec.reason || 'Scan recommendation',
+    expiry: rec.expiry || null,
+    strike: rec.strike || null,
+  });
 }
 
 /**
@@ -91,6 +202,9 @@ function mergeRecommendations(screened, aiResults) {
         symbol: stock.symbol,
         name: stock.name,
         sector: stock.sector,
+        sectorRank: stock.sectorRank,
+        sectorTrend: stock.sectorTrend,
+        sectorMomentum: stock.sectorMomentum,
         lotSize: stock.lotSize,
         price: stock.price,
         change: stock.change,
@@ -175,6 +289,9 @@ function enrichFromTechnicals(screened) {
       symbol: s.symbol,
       name: s.name,
       sector: s.sector,
+      sectorRank: s.sectorRank,
+      sectorTrend: s.sectorTrend,
+      sectorMomentum: s.sectorMomentum,
       lotSize: s.lotSize,
       price: s.price,
       change: s.change,

@@ -31,6 +31,7 @@ AI-powered Indian F&O trading decision system. Uses Claude Code CLI as analysis 
 - `tradeoracle portfolio` — View portfolio + P&L
 - `tradeoracle trades` — Active trades with live P&L
 - `tradeoracle exit <SYMBOL>` — Manual exit position
+- `tradeoracle history` — Past trades + win rate + performance stats
 - `tradeoracle pulse` — Quick market pulse
 - `tradeoracle daemon` — Start 24x7 daemon with all schedulers
 
