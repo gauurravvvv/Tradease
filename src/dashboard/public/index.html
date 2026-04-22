@@ -230,11 +230,73 @@
       font-size: 0.8rem;
     }
 
+    /* ── Market status grid ───────────────────────── */
+    .market-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+    .global-table td { padding: 6px 10px; font-size: 0.75rem; }
+    .global-table th { padding: 6px 10px; }
+    .sector-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 0;
+      border-bottom: 1px solid rgba(30,30,46,0.3);
+    }
+    .sector-bar:last-child { border-bottom: none; }
+    .sector-name { width: 120px; font-size: 0.75rem; }
+    .sector-fill {
+      height: 8px;
+      border-radius: 4px;
+      min-width: 2px;
+      transition: width 0.3s ease;
+    }
+    .sector-pct { font-size: 0.7rem; min-width: 50px; text-align: right; }
+    .fii-row {
+      display: flex;
+      justify-content: space-around;
+      gap: 16px;
+      padding: 12px 0;
+    }
+    .fii-block { text-align: center; }
+    .fii-label { font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; }
+    .fii-value { font-size: 1.1rem; font-weight: 700; margin-top: 4px; }
+    .fii-signal { font-size: 0.7rem; margin-top: 2px; }
+    .mood-bar {
+      height: 10px;
+      border-radius: 5px;
+      background: linear-gradient(90deg, var(--red), var(--yellow), var(--green));
+      position: relative;
+      margin: 10px 0;
+    }
+    .mood-indicator {
+      position: absolute;
+      top: -3px;
+      width: 16px; height: 16px;
+      border-radius: 50%;
+      background: white;
+      border: 2px solid var(--bg);
+      transform: translateX(-50%);
+      transition: left 0.5s ease;
+    }
+    .vix-card {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 8px 0;
+    }
+    .vix-label { font-size: 0.75rem; color: var(--text-dim); }
+    .vix-value { font-size: 1.2rem; font-weight: 700; }
+
     /* ── Responsive ─────────────────────────────── */
     @media (max-width: 900px) {
       .grid { grid-template-columns: repeat(2, 1fr); }
       .pulse-row { grid-template-columns: 1fr; }
       .two-col { grid-template-columns: 1fr; }
+      .market-grid { grid-template-columns: 1fr; }
     }
     @media (max-width: 600px) {
       .grid { grid-template-columns: 1fr; }
@@ -297,6 +359,34 @@
         <div class="pulse-price" id="market-status">--</div>
       </div>
       <div id="market-severity"></div>
+    </div>
+  </div>
+
+  <!-- Market Status: Global + Sectors + FII/DII -->
+  <div class="market-grid">
+    <!-- Global Markets -->
+    <div class="section">
+      <div class="section-header">
+        <span class="section-title">Global Markets</span>
+        <span class="badge badge-gray" id="mood-badge">--</span>
+      </div>
+      <div id="global-container"><div class="empty">Loading...</div></div>
+      <div style="padding:8px 0">
+        <div style="font-size:0.65rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Global Mood</div>
+        <div class="mood-bar"><div class="mood-indicator" id="mood-dot" style="left:50%"></div></div>
+      </div>
+    </div>
+
+    <!-- Sectors + FII/DII -->
+    <div class="section">
+      <div class="section-header">
+        <span class="section-title">Sectors & Flows</span>
+        <span class="badge badge-gray" id="session-badge">--</span>
+      </div>
+      <!-- FII/DII -->
+      <div id="fii-container" style="margin-bottom:12px"><div class="empty">Loading...</div></div>
+      <div style="font-size:0.65rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Sector Rotation</div>
+      <div id="sector-container"><div class="empty">Loading...</div></div>
     </div>
   </div>
 
@@ -542,12 +632,151 @@
     el.innerHTML = `<div class="sentiment-grid">${cards}</div>`;
   }
 
+  // ── Market Status renderers ──────────────────────────────
+
+  function renderGlobal(global) {
+    const el = document.getElementById('global-container');
+    const moodBadge = document.getElementById('mood-badge');
+    const moodDot = document.getElementById('mood-dot');
+
+    if (!global) { el.innerHTML = '<div class="empty">No data</div>'; return; }
+
+    const rows = [];
+    const addRow = (name, q) => {
+      if (!q) return;
+      const chgClass = (q.changePct || 0) >= 0 ? 'text-green' : 'text-red';
+      rows.push(`<tr>
+        <td class="text-dim">${name}</td>
+        <td>${q.price?.toFixed(1) || '--'}</td>
+        <td class="${chgClass}">${pct(q.changePct)}</td>
+      </tr>`);
+    };
+
+    addRow('S&P 500', global.us?.sp500);
+    addRow('Nasdaq', global.us?.nasdaq);
+    addRow('Dow Jones', global.us?.dow);
+    addRow('Nikkei 225', global.asia?.nikkei);
+    addRow('Hang Seng', global.asia?.hangSeng);
+    addRow('Crude WTI', global.commodities?.crudeWTI);
+    addRow('Gold', global.commodities?.gold);
+    addRow('Dollar Index', global.currencies?.dollarIndex);
+    addRow('US 10Y', global.bonds?.us10y);
+
+    const vix = global.volatility?.vix;
+    if (vix) {
+      const vixClass = vix.price > 20 ? 'text-red' : vix.price > 15 ? 'text-yellow' : 'text-green';
+      rows.push(`<tr>
+        <td class="text-dim">VIX</td>
+        <td class="${vixClass} text-bold">${vix.price?.toFixed(1)}</td>
+        <td class="${(vix.changePct || 0) >= 0 ? 'text-red' : 'text-green'}">${pct(vix.changePct)}</td>
+      </tr>`);
+    }
+
+    el.innerHTML = `<table class="global-table">
+      <thead><tr><th>Market</th><th>Price</th><th>Change</th></tr></thead>
+      <tbody>${rows.join('')}</tbody>
+    </table>`;
+
+    // Mood
+    const score = global.sentimentScore || 0;
+    const sentiment = global.sentiment || 'MIXED';
+    const sentClass = sentiment === 'BULLISH' ? 'badge-green' : sentiment === 'BEARISH' ? 'badge-red' : 'badge-yellow';
+    moodBadge.textContent = sentiment;
+    moodBadge.className = `badge ${sentClass}`;
+    // Map -100..+100 to 0%..100%
+    moodDot.style.left = `${((score + 100) / 200) * 100}%`;
+  }
+
+  function renderFiiDii(fiiDii) {
+    const el = document.getElementById('fii-container');
+    if (!fiiDii) { el.innerHTML = ''; return; }
+
+    const fmtCr = (val) => {
+      if (val == null) return '--';
+      const sign = val >= 0 ? '+' : '';
+      return `${sign}₹${Math.abs(val).toLocaleString('en-IN')} Cr`;
+    };
+
+    const fiiNet = fiiDii.fii?.netValue;
+    const diiNet = fiiDii.dii?.netValue;
+    const fiiClass = (fiiNet || 0) >= 0 ? 'text-green' : 'text-red';
+    const diiClass = (diiNet || 0) >= 0 ? 'text-green' : 'text-red';
+    const fiiSignal = fiiDii.fii?.signal || '--';
+    const diiSignal = fiiDii.dii?.signal || '--';
+    const sentClass = fiiDii.sentiment === 'BULLISH' ? 'text-green' : fiiDii.sentiment === 'BEARISH' ? 'text-red' : 'text-yellow';
+
+    el.innerHTML = `<div class="fii-row">
+      <div class="fii-block">
+        <div class="fii-label">FII</div>
+        <div class="fii-value ${fiiClass}">${fmtCr(fiiNet)}</div>
+        <div class="fii-signal ${fiiClass}">${fiiSignal}</div>
+      </div>
+      <div class="fii-block">
+        <div class="fii-label">DII</div>
+        <div class="fii-value ${diiClass}">${fmtCr(diiNet)}</div>
+        <div class="fii-signal ${diiClass}">${diiSignal}</div>
+      </div>
+      <div class="fii-block">
+        <div class="fii-label">Flow</div>
+        <div class="fii-value ${sentClass}">${fiiDii.sentiment || '--'}</div>
+      </div>
+    </div>`;
+  }
+
+  function renderSectors(sectors) {
+    const el = document.getElementById('sector-container');
+    if (!sectors || !sectors.length) { el.innerHTML = '<div class="text-dim" style="font-size:0.75rem">No sector data</div>'; return; }
+
+    const sorted = [...sectors].sort((a, b) => (b.todayChange || 0) - (a.todayChange || 0));
+    const maxAbs = Math.max(...sorted.map(s => Math.abs(s.todayChange || 0)), 1);
+
+    const bars = sorted.map(s => {
+      const chg = s.todayChange || 0;
+      const width = Math.max(2, (Math.abs(chg) / maxAbs) * 100);
+      const color = chg >= 0 ? 'var(--green)' : 'var(--red)';
+      const chgClass = chg >= 0 ? 'text-green' : 'text-red';
+      const name = (s.sector || '--').replace('Nifty ', '');
+
+      return `<div class="sector-bar">
+        <span class="sector-name">${name}</span>
+        <span class="sector-fill" style="width:${width}%;background:${color}"></span>
+        <span class="sector-pct ${chgClass}">${pct(chg)}</span>
+      </div>`;
+    }).join('');
+
+    el.innerHTML = bars;
+  }
+
+  function renderMarketStatus(ms) {
+    if (!ms) return;
+
+    // Session badge
+    const sessionEl = document.getElementById('session-badge');
+    const sessionClass = ms.session === 'OPEN' ? 'badge-green'
+      : ms.session === 'CLOSED' ? 'badge-gray' : 'badge-yellow';
+    sessionEl.textContent = ms.session;
+    sessionEl.className = `badge ${sessionClass}`;
+
+    // Header dot color
+    const dot = document.querySelector('.status-dot');
+    dot.style.background = ms.session === 'OPEN' ? 'var(--green)'
+      : ms.session === 'CLOSED' ? 'var(--text-dim)' : 'var(--yellow)';
+
+    renderGlobal(ms.global);
+    renderFiiDii(ms.fiiDii);
+    renderSectors(ms.sectors);
+
+    // Also update pulse from market-status indices if available
+    if (ms.indices) renderPulse(ms.indices);
+  }
+
   // ── Fetch & render ──────────────────────────────────────
   async function refresh() {
     try {
-      const [dashRes, newsRes] = await Promise.all([
+      const [dashRes, newsRes, marketRes] = await Promise.all([
         fetch('/api/dashboard').then(r => r.json()),
         fetch('/api/news').then(r => r.json()).catch(() => []),
+        fetch('/api/market-status').then(r => r.json()).catch(() => null),
       ]);
 
       renderPortfolio(dashRes.portfolio);
@@ -556,6 +785,7 @@
       renderStats(dashRes.stats);
       renderHistory(dashRes.history || []);
       renderNews(newsRes);
+      renderMarketStatus(marketRes);
 
       const now = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
       document.getElementById('last-updated').textContent = `Updated: ${now}`;

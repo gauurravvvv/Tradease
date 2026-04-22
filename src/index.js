@@ -8,6 +8,7 @@ import { runNewsDigest } from './cli/news.js';
 import { showPortfolio, showTrades, showHistory } from './cli/portfolio.js';
 import { displayHeader, displayMarketPulse, formatCurrency } from './cli/display.js';
 import { startDashboard } from './dashboard/server.js';
+import { runMarketStatus } from './cli/status.js';
 import { createScheduler } from './scheduler/cron.js';
 import { ListenerManager } from './listeners/manager.js';
 import { checkIndexHealth } from './listeners/index-monitor.js';
@@ -162,36 +163,16 @@ program
     }
   });
 
-// ─── pulse ──────────────────────────────────────────────────────────────────
+// ─── status / pulse ─────────────────────────────────────────────────────────
 program
-  .command('pulse')
-  .description('Quick market pulse — index levels + open positions')
+  .command('status')
+  .alias('pulse')
+  .description('Full market status — indices, global cues, FII/DII, sectors, VIX')
   .action(async () => {
     try {
-      displayHeader('Market Pulse', new Date().toLocaleString('en-IN'));
-
-      const indexData = await checkIndexHealth();
-      displayMarketPulse(indexData);
-
-      // Open positions summary
-      try {
-        getDb();
-        const openTrades = getOpenTrades();
-        if (openTrades.length > 0) {
-          console.log(chalk.bold.white(`  Open Positions: ${openTrades.length}`));
-          for (const t of openTrades) {
-            const typeColor = t.type === 'CALL' ? chalk.green : chalk.red;
-            console.log(`    ${typeColor(t.type)} ${chalk.white(t.symbol)} @ ${formatCurrency(t.entry_price)} → SL: ${formatCurrency(t.stop_loss)}`);
-          }
-          console.log('');
-        } else {
-          console.log(chalk.gray('  No open positions.\n'));
-        }
-      } catch {
-        // DB not initialized — skip trades
-      }
+      await runMarketStatus();
     } catch (err) {
-      console.error(chalk.red(`Pulse failed: ${err.message}`));
+      console.error(chalk.red(`Status failed: ${err.message}`));
       process.exit(1);
     }
   });

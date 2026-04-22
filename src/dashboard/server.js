@@ -7,6 +7,9 @@ import { getPortfolioSummary, getPerformanceStats } from '../trading/portfolio.j
 import { checkIndexHealth } from '../listeners/index-monitor.js';
 import { getStockNews } from '../data/news.js';
 import { scoreSentiment, classifySentiment } from '../listeners/news-monitor.js';
+import { getGlobalCues } from '../data/global-cues.js';
+import { getFiiDiiData } from '../data/fii-dii.js';
+import { getSectorStrength } from '../analysis/sectors.js';
 import { logger } from '../utils/logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -86,6 +89,42 @@ export function startDashboard(port = 3777) {
     try {
       const indexData = await checkIndexHealth();
       res.json(indexData);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Full market status
+  app.get('/api/market-status', async (req, res) => {
+    try {
+      const [indexHealth, globalCues, fiiDii, sectors] = await Promise.allSettled([
+        checkIndexHealth(),
+        getGlobalCues(),
+        getFiiDiiData(),
+        getSectorStrength(),
+      ]);
+
+      // Market session
+      const now = new Date();
+      const ist = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+      const day = ist.getDay();
+      const mins = ist.getHours() * 60 + ist.getMinutes();
+      let session;
+      if (day === 0 || day === 6) session = 'CLOSED';
+      else if (mins < 9 * 60) session = 'PRE-MARKET';
+      else if (mins < 9 * 60 + 15) session = 'PRE-OPEN';
+      else if (mins < 15 * 60 + 30) session = 'OPEN';
+      else if (mins < 16 * 60) session = 'POST-MARKET';
+      else session = 'CLOSED';
+
+      res.json({
+        session,
+        timestamp: now.toISOString(),
+        indices: indexHealth.status === 'fulfilled' ? indexHealth.value : null,
+        global: globalCues.status === 'fulfilled' ? globalCues.value : null,
+        fiiDii: fiiDii.status === 'fulfilled' ? fiiDii.value : null,
+        sectors: sectors.status === 'fulfilled' ? sectors.value : [],
+      });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }

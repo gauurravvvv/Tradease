@@ -34,7 +34,7 @@ AI-powered Indian F&O trading decision system. Uses Claude Code CLI as analysis 
 - `tradease trades` — Active trades with live P&L
 - `tradease exit <SYMBOL>` — Manual exit position
 - `tradease history` — Past trades + win rate + performance stats
-- `tradease pulse` — Quick market pulse
+- `tradease status` (alias: `pulse`) — Full market status (indices, global, FII/DII, sectors, VIX)
 - `tradease daemon` — Start 24x7 daemon with all schedulers
 
 ## Code Style

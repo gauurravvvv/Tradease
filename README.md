@@ -135,9 +135,18 @@ tradease exit RELIANCE
 tradease exit RELIANCE --reason "Sector rotation out"
 ```
 
-### `tradease pulse`
+### `tradease status` (alias: `tradease pulse`)
 
-Quick market pulse — Nifty/BankNifty levels, change %, and open positions summary.
+Full market status — indices, global cues, FII/DII flows, sector rotation, VIX.
+
+Shows:
+- Market session status (OPEN / PRE-MARKET / CLOSED)
+- Nifty + BankNifty levels with severity
+- VIX level and change
+- Global markets table (S&P, Nasdaq, Dow, Nikkei, Hang Seng, Crude, Gold, DXY, US 10Y)
+- Global mood sentiment bar
+- FII/DII flows with buy/sell signals
+- Sector rotation table with trend arrows
 
 ### `tradease dashboard`
 
@@ -150,7 +159,10 @@ tradease dashboard -p 8080    # Custom port
 
 Shows:
 - Portfolio summary cards (capital, available, unrealized P&L, positions)
-- Market pulse (Nifty, BankNifty, market status)
+- Market pulse (Nifty, BankNifty, market session status)
+- Global markets table with mood sentiment bar
+- FII/DII flows with buy/sell signals
+- Sector rotation with visual bars
 - Open trades table with live P&L + visual bars
 - Performance stats (30d win rate, avg win/loss, best/worst)
 - News sentiment cards for open positions with headlines
