@@ -645,6 +645,26 @@ export function startDashboard(port = 3777) {
     }
   });
 
+  // Hard reload — flush all caches
+  app.post('/api/reload', async (req, res) => {
+    try {
+      screenerCache.data = null;
+      screenerCache.ts = 0;
+      chartCache.clear();
+      liveCache.trades = { data: null, ts: 0 };
+      liveCache.news = { data: null, ts: 0 };
+      liveCache.indices = { data: null, ts: 0 };
+      try {
+        const { clearMarketCache } = await import('../data/market.js');
+        clearMarketCache();
+      } catch {}
+      logger.info('[dashboard] Hard reload — all caches flushed');
+      res.json({ success: true, message: 'All caches cleared' });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // Intraday 5-min chart data
   app.get('/api/chart/:symbol', async (req, res) => {
     try {
@@ -917,6 +937,23 @@ export function startDashboard(port = 3777) {
   app.get('/api/recommendations', async (req, res) => {
     try {
       getDb();
+      // Return empty outside market hours (9:15 - 15:30 IST, Mon-Fri)
+      const ist = new Date(
+        new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }),
+      );
+      const day = ist.getDay();
+      const mins = ist.getHours() * 60 + ist.getMinutes();
+      const marketOpen = mins >= 9 * 60 + 15 && mins < 15 * 60 + 30;
+      if (day === 0 || day === 6 || !marketOpen) {
+        screenerCache.data = null;
+        screenerCache.ts = 0;
+        return res.json({
+          recommendations: [],
+          portfolio: { available: 0, positions: 0, maxPositions: TRADING.MAX_POSITIONS },
+          scannedAt: null,
+          marketClosed: true,
+        });
+      }
       const now = Date.now();
       let picks = screenerCache.data;
       if (!picks || now - screenerCache.ts >= SCREENER_TTL) {
@@ -1240,17 +1277,34 @@ export function startDashboard(port = 3777) {
   let pumpInterval = null;
   let pumpTick = 0;
 
+  function isMarketOpen() {
+    const ist = new Date(
+      new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }),
+    );
+    const day = ist.getDay();
+    if (day === 0 || day === 6) return false;
+    const mins = ist.getHours() * 60 + ist.getMinutes();
+    return mins >= 9 * 60 && mins < 16 * 60; // 9:00 - 16:00 (include pre/post)
+  }
+
   function startPump() {
     if (pumpInterval) return;
     pumpInterval = setInterval(async () => {
       if (sseClients.size === 0) return;
       pumpTick++;
 
-      // Every 15s: live trade prices
+      const marketOpen = isMarketOpen();
+
+      // Broadcast market status so frontend knows
+      if (pumpTick % 4 === 0) {
+        broadcast('marketStatus', { open: marketOpen });
+      }
+
+      // Every 15s: live trade prices (only during market hours OR if positions open)
       try {
         getDb();
         const trades = getOpenTrades();
-        if (trades.length) {
+        if (trades.length && marketOpen) {
           const symbols = [...new Set(trades.map(t => t.symbol))];
           const quotes = {};
           await Promise.allSettled(
@@ -1294,6 +1348,7 @@ export function startDashboard(port = 3777) {
               t2_hit: t.t2_hit,
               quantity: t.quantity,
               capital_used: t.capital_used,
+              entered_at: t.entered_at,
               live_pnl: pnl,
               live_pnl_pct: pnlPct,
             };
@@ -1302,22 +1357,22 @@ export function startDashboard(port = 3777) {
           broadcast('trades', enriched);
         }
 
-        // Portfolio update alongside
+        // Portfolio: always broadcast (lightweight, DB-only)
         const portfolio = getPortfolioSummary();
         portfolio.maxPositions = TRADING.MAX_POSITIONS;
         broadcast('portfolio', portfolio);
       } catch {}
 
-      // Every 60s: index prices
-      if (pumpTick % 4 === 0) {
+      // Every 60s: index prices (skip when market closed)
+      if (pumpTick % 4 === 0 && marketOpen) {
         try {
           const idx = await checkIndexHealth();
           broadcast('indices', idx);
         } catch {}
       }
 
-      // Every 2min: live news
-      if (pumpTick % 8 === 0) {
+      // Every 2min: live news (skip when market closed)
+      if (pumpTick % 8 === 0 && marketOpen) {
         try {
           const articles = await fetchAllNews();
           const scored = articles.slice(0, 20).map(a => ({
@@ -1331,7 +1386,7 @@ export function startDashboard(port = 3777) {
         } catch {}
       }
 
-      // Every 30s: agent activity
+      // Every 30s: agent activity (DB-only, always fine)
       if (pumpTick % 2 === 0) {
         try {
           const db = getDb();

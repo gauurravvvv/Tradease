@@ -435,7 +435,7 @@ program
             const recommendations = await runScan({ interactive: false });
             if (Array.isArray(recommendations) && recommendations.length > 0) {
               notifyScanComplete(recommendations.length);
-              const entered = autoExecuteTrades(recommendations, 60);
+              const entered = autoExecuteTrades(recommendations, TRADING.MIN_CONFIDENCE);
               logger.info(`[daemon] Auto-executed ${entered.length} trade(s)`);
             } else {
               logger.info('[daemon] No recommendations to execute.');

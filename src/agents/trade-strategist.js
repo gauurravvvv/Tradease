@@ -267,8 +267,8 @@ export class TradeStrategist extends BaseAgent {
 Stock: ${stock.symbol} ₹${stock.price}
 Score: ${stock.score}/100 (borderline)
 Signal: ${stock.recommendation}
-RSI: ${stock.technicals?.rsi?.toFixed(1)}
-Volume ratio: ${stock.technicals?.volumeRatio?.toFixed(1)}x
+RSI: ${(stock.technicals?.rsi?.value ?? stock.technicals?.rsi)?.toFixed?.(1) ?? '--'}
+Volume ratio: ${(stock.technicals?.volume?.ratio ?? stock.technicals?.volumeRatio)?.toFixed?.(1) ?? '--'}x
 Sector: ${stock.sector}
 News: ${newsData.headline || newsData.summary || 'bullish signal'}
 

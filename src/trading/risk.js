@@ -214,7 +214,12 @@ export function validateTrade(trade, portfolio) {
  * @returns {{ shouldExit: boolean, reason: string, action: string }}
  */
 export function shouldExit(trade, currentPrice, atr) {
-  const { entryPrice, stopLoss, target1, target2, type } = trade;
+  // Accept both camelCase and snake_case (DB rows use snake_case)
+  const entryPrice = trade.entryPrice ?? trade.entry_price;
+  const stopLoss = trade.stopLoss ?? trade.stop_loss;
+  const target1 = trade.target1;
+  const target2 = trade.target2;
+  const type = trade.type;
 
   // Check stop-loss hit
   if (type === 'CALL' && currentPrice <= stopLoss) {

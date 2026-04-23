@@ -1739,6 +1739,7 @@
         <div style="flex: 1"></div>
         <span class="text-dim" style="font-size: 0.6rem" id="scan-age"></span>
         <button class="btn btn-sm" onclick="refreshAll()">Refresh</button>
+        <button class="btn btn-sm" onclick="hardReload()" title="Flush all caches and reload fresh data">Hard Reload</button>
         <button
           class="theme-toggle"
           onclick="toggleTheme()"
@@ -3351,15 +3352,16 @@
       <td class="${pc(pnl)}" style="font-weight:600">${INR(pnl)} (${pct(pp)})<span class="pnl-bar" style="width:${bw}px;background:${pnl >= 0 ? 'var(--green)' : 'var(--red)'}"></span></td>
       <td class="text-dim">${t.quantity || 1}L</td>
       <td>${INR(t.capital_used)}</td>
+      <td class="text-dim" style="font-size:0.8em;white-space:nowrap">${t.entered_at ? new Date(t.entered_at).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',hour12:true}) : '--'}</td>
       <td style="white-space:nowrap">
         <button class="chart-toggle" onclick="toggleTradeChart('${t.symbol}','${tradeDataJson}')">Chart</button>
         <button class="btn btn-sm btn-red" onclick="openExitModal(${t.id},'${t.symbol}','full')">Exit</button>
         <button class="btn btn-sm" onclick="openExitModal(${t.id},'${t.symbol}','partial')" style="margin-left:2px">50%</button>
       </td>
-    </tr><tr><td colspan="11" style="padding:0;border:none"><div class="trade-chart-area" id="chart-area-${safeSymbol}"></div></td></tr>`;
+    </tr><tr><td colspan="12" style="padding:0;border:none"><div class="trade-chart-area" id="chart-area-${safeSymbol}"></div></td></tr>`;
           })
           .join('');
-        el.innerHTML = `<table><thead><tr><th>Symbol</th><th>Type</th><th>Entry</th><th>CMP</th><th>SL</th><th>T1</th><th>T2</th><th>P&L</th><th>Qty</th><th>Capital</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table>`;
+        el.innerHTML = `<table><thead><tr><th>Symbol</th><th>Type</th><th>Entry</th><th>CMP</th><th>SL</th><th>T1</th><th>T2</th><th>P&L</th><th>Qty</th><th>Capital</th><th>Entered</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table>`;
         document.getElementById('last-updated').textContent =
           `Live: ${new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
       }
@@ -3453,8 +3455,11 @@
             `Scanned ${timeAgo(_scanAge)}`;
         }
         if (!recs.length) {
+          const msg = data.marketClosed
+            ? 'Market closed — no active recommendations'
+            : 'No actionable recommendations';
           el.innerHTML =
-            '<div class="empty">No actionable recommendations<div class="empty-cta"><button class="btn btn-primary" onclick="runScan()">Run Scan</button></div></div>';
+            `<div class="empty">${msg}<div class="empty-cta"><button class="btn btn-primary" onclick="runScan()">Run Scan</button></div></div>`;
           return;
         }
         el.innerHTML =
@@ -3475,7 +3480,7 @@
               const rrPct = r.riskReward
                 ? Math.min((r.riskReward / 4) * 100, 100)
                 : 0;
-              const canTrade = r.canTrade && port.positions < 3;
+              const canTrade = r.canTrade && port.positions < (port.maxPositions||3);
               return `<div class="rec-card" style="border-left:3px solid ${typeColor}">
       <div class="rec-card-header"><div><div class="rec-card-symbol" onclick="openResearchFor('${r.symbol}')">${r.symbol}</div><div class="rec-card-sector">${r.name || r.sector || ''}</div></div><div style="text-align:right"><span class="badge ${typeBadge}" style="font-size:0.7rem">${r.recommendation}</span><div style="margin-top:4px"><span style="background:${scColor};color:var(--bg);padding:2px 8px;border-radius:4px;font-size:0.7rem;font-weight:700">${sc}</span></div></div></div>
       <div class="rec-card-price"><span style="font-size:1.1rem;font-weight:700">₹${r.price?.toLocaleString('en-IN')}</span><span class="${pc(r.changePct || 0)}" style="font-size:0.8rem">${pct(r.changePct)}</span></div>
@@ -4644,17 +4649,31 @@
         }
       }
 
+      // Market hours awareness
+      let _marketOpen = true;
+      function checkMarketOpen() {
+        const now = new Date();
+        const ist = new Date(now.toLocaleString('en-US',{timeZone:'Asia/Kolkata'}));
+        const day = ist.getDay();
+        if (day===0||day===6) return false;
+        const mins = ist.getHours()*60+ist.getMinutes();
+        return mins>=9*60+15 && mins<15*60+30;
+      }
+      _marketOpen = checkMarketOpen();
+
       async function initialLoad() {
-        await Promise.all([
-          loadDashboard(),
-          loadMarketStatus(),
-          loadRecommendations(),
-          loadLiveNews(),
-          loadAgentStatus(),
-        ]);
+        const loads = [loadDashboard(), loadAgentStatus()];
+        if (_marketOpen) {
+          loads.push(loadMarketStatus(), loadRecommendations(), loadLiveNews());
+        } else {
+          loads.push(loadRecommendations()); // shows "Market Closed" message
+        }
+        await Promise.all(loads);
         document.getElementById('last-updated').textContent =
           `Live: ${new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
-        loadPicks().then(() => loadNews());
+        if (_marketOpen) {
+          loadPicks().then(() => loadNews());
+        }
         loadRiskDashboard();
         loadEquityCurve(7);
         loadBacktest();
@@ -4720,20 +4739,27 @@
       }
 
       // Wrap loaders to reset countdown on refresh
-      function scheduleWithCd(fn, key, ms) {
+      function scheduleWithCd(fn, key, ms, marketOnly) {
         setInterval(() => {
+          if (marketOnly && !_marketOpen) return;
           fn();
           resetCd(key);
         }, ms);
       }
-      scheduleWithCd(loadDashboard, 'trades', 60000);
-      scheduleWithCd(loadMarketStatus, 'market', 120000);
-      scheduleWithCd(loadRecommendations, 'recs', 600000);
-      scheduleWithCd(loadAgentStatus, 'agents', 30000);
-      scheduleWithCd(loadRiskDashboard, 'risk', 30000);
-      scheduleWithCd(loadLiveNews, 'live-news', 300000);
-      scheduleWithCd(loadNews, 'news', 600000);
-      scheduleWithCd(loadPicks, 'picks', 600000);
+      // Re-check market status every 60s
+      setInterval(() => { _marketOpen = checkMarketOpen(); }, 60000);
+
+      // Always run (DB-only, cheap)
+      scheduleWithCd(loadDashboard, 'trades', 60000, false);
+      scheduleWithCd(loadAgentStatus, 'agents', 30000, false);
+      scheduleWithCd(loadRiskDashboard, 'risk', 60000, false);
+
+      // Market hours only (external API calls)
+      scheduleWithCd(loadMarketStatus, 'market', 120000, true);
+      scheduleWithCd(loadRecommendations, 'recs', 600000, true);
+      scheduleWithCd(loadLiveNews, 'live-news', 300000, true);
+      scheduleWithCd(loadNews, 'news', 600000, true);
+      scheduleWithCd(loadPicks, 'picks', 600000, true);
 
       // ── Browser title P&L ──
       let _titlePnl = 0,
@@ -4866,6 +4892,17 @@
         btn.textContent = 'Run Scan';
         spin('spin-recs', false);
         spin('spin-picks', false);
+      }
+
+      async function hardReload() {
+        toast('Flushing all caches...','info',3000);
+        try {
+          await api('/api/reload',{method:'POST'});
+          toast('Caches cleared. Reloading...','success',2000);
+          await refreshAll();
+        } catch(e) {
+          toast('Reload failed: '+e.message,'error',5000);
+        }
       }
 
       // ── Research ──
