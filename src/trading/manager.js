@@ -225,7 +225,9 @@ export function partialExit(tradeId, percentage, exitPrice, reason) {
       throw new Error(`No open trade found with id ${tradeId}`);
     }
 
-    const qtyToClose = Math.max(1, Math.round(trade.quantity * percentage));
+    // Use floor to avoid over-exiting (e.g. 3 lots × 50% = 1 lot, not 2)
+    // Minimum 1 lot so partial exit always does something
+    const qtyToClose = Math.max(1, Math.floor(trade.quantity * percentage));
     const remainingQty = trade.quantity - qtyToClose;
 
     if (remainingQty < 1) {

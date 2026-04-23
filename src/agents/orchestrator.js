@@ -34,6 +34,15 @@ export class AgentOrchestrator {
 
     logger.info('[orchestrator] Starting agents...');
 
+    // Verify DB has open trades table ready before starting guardian
+    try {
+      const db = getDb();
+      db.prepare('SELECT COUNT(*) as c FROM trades WHERE status = ?').get('OPEN');
+    } catch (err) {
+      logger.error(`[orchestrator] DB not ready: ${err.message}`);
+      throw err;
+    }
+
     // Stagger starts to avoid burst
     this.agents.guardian.start(); // most critical
     setTimeout(() => this.agents.sentinel.start(), 3_000); // 3s delay

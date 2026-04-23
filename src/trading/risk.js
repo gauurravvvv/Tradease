@@ -1,4 +1,5 @@
 import { TRADING } from '../config/settings.js';
+import { getISTMinutes } from '../utils/ist.js';
 
 /**
  * Calculate position size based on capital, price, and lot size.
@@ -56,6 +57,14 @@ export function calculateStopLoss(entryPrice, atr, type) {
 export function calculateTargets(entryPrice, stopLoss, type) {
   const risk = Math.abs(entryPrice - stopLoss);
 
+  // Validate stop-loss is on correct side of entry
+  if (type === 'CALL' && stopLoss >= entryPrice) {
+    return { target1: null, target2: null, riskPerLot: 0 };
+  }
+  if (type === 'PUT' && stopLoss <= entryPrice) {
+    return { target1: null, target2: null, riskPerLot: 0 };
+  }
+
   let target1, target2;
 
   if (type === 'CALL') {
@@ -67,9 +76,13 @@ export function calculateTargets(entryPrice, stopLoss, type) {
     target2 = entryPrice - risk * TRADING.RISK_REWARD.T2;
   }
 
+  // Ensure target2 > target1 (CALL) or target2 < target1 (PUT)
+  const t1 = Math.round(target1 * 100) / 100;
+  const t2 = Math.round(target2 * 100) / 100;
+
   return {
-    target1: Math.round(target1 * 100) / 100,
-    target2: Math.round(target2 * 100) / 100,
+    target1: t1,
+    target2: type === 'CALL' ? Math.max(t2, t1) : Math.min(t2, t1),
     riskPerLot: Math.round(risk * 100) / 100,
   };
 }
@@ -187,13 +200,9 @@ export function validateTrade(trade, portfolio) {
   }
 
   // Check market hours — no new entries after NO_NEW_ENTRY_AFTER (IST)
-  const now = new Date();
-  const ist = new Date(
-    now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }),
-  );
   const [cutoffHour, cutoffMin] =
     TRADING.NO_NEW_ENTRY_AFTER.split(':').map(Number);
-  const currentMinutes = ist.getHours() * 60 + ist.getMinutes();
+  const currentMinutes = getISTMinutes();
   const cutoffMinutes = cutoffHour * 60 + cutoffMin;
 
   if (currentMinutes >= cutoffMinutes) {

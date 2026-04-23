@@ -2,6 +2,7 @@ import { getDb } from '../db/sqlite.js';
 import { askClaude } from '../analysis/claude.js';
 import { clearMarketCache } from '../data/market.js';
 import { logger } from '../utils/logger.js';
+import { isMarketHours as _isMarketHours, getISTMinutes as _getISTMinutes } from '../utils/ist.js';
 
 /**
  * Base class for autonomous trading agents.
@@ -209,22 +210,11 @@ export class BaseAgent {
   // ── Market Hours ──
 
   isMarketHours(startHour = 9, startMin = 0, endHour = 15, endMin = 30) {
-    const now = new Date();
-    const ist = new Date(
-      now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }),
-    );
-    const day = ist.getDay();
-    if (day === 0 || day === 6) return false;
-    const mins = ist.getHours() * 60 + ist.getMinutes();
-    return mins >= startHour * 60 + startMin && mins <= endHour * 60 + endMin;
+    return _isMarketHours(startHour, startMin, endHour, endMin);
   }
 
   getISTMinutes() {
-    const now = new Date();
-    const ist = new Date(
-      now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }),
-    );
-    return ist.getHours() * 60 + ist.getMinutes();
+    return _getISTMinutes();
   }
 
   getStats() {

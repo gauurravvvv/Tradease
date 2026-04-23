@@ -36,11 +36,40 @@ import { DATA, TRADING } from '../config/settings.js';
 import { FNO_STOCKS } from '../data/fno-stocks.js';
 import { analyzeTechnicals, computeATR } from '../analysis/technicals.js';
 import { logger } from '../utils/logger.js';
+import { isMarketOpen as isMarketOpenIST, isMarketHours as isMarketHoursIST } from '../utils/ist.js';
 import {
   getOrchestrator,
   setOrchestrator,
   AgentOrchestrator,
 } from '../agents/orchestrator.js';
+
+// ── Simple in-memory rate limiter ──
+const _rateLimits = new Map(); // key: ip, value: { count, resetAt }
+const RATE_LIMIT_WINDOW = 60_000; // 1 minute
+const RATE_LIMIT_MAX = 60; // 60 requests per minute per IP
+
+function rateLimit(req, res, next) {
+  const ip = req.ip || req.socket.remoteAddress || 'unknown';
+  const now = Date.now();
+  let entry = _rateLimits.get(ip);
+  if (!entry || now > entry.resetAt) {
+    entry = { count: 0, resetAt: now + RATE_LIMIT_WINDOW };
+    _rateLimits.set(ip, entry);
+  }
+  entry.count++;
+  if (entry.count > RATE_LIMIT_MAX) {
+    return res.status(429).json({ error: 'Too many requests. Try again later.' });
+  }
+  next();
+}
+
+// Cleanup stale rate limit entries every 5 minutes
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, entry] of _rateLimits) {
+    if (now > entry.resetAt) _rateLimits.delete(ip);
+  }
+}, 5 * 60_000);
 
 // Cache for expensive operations
 const screenerCache = { data: null, ts: 0 };
@@ -91,6 +120,7 @@ export function startDashboard(port = 3777) {
 
   // Middleware
   app.use(express.json());
+  app.use('/api', rateLimit); // rate limit API endpoints only
   app.use(express.static(path.join(__dirname, 'public')));
 
   // ── API Routes ──────────────────────────────────────────────────────────
@@ -175,13 +205,11 @@ export function startDashboard(port = 3777) {
           getSectorStrength(),
         ]);
 
-      // Market session
+      // Market session (uses shared IST utility)
       const now = new Date();
-      const ist = new Date(
-        now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }),
-      );
-      const day = ist.getDay();
-      const mins = ist.getHours() * 60 + ist.getMinutes();
+      const { getISTTime } = await import('../utils/ist.js');
+      const { hour, minute, day } = getISTTime(now);
+      const mins = hour * 60 + minute;
       let session;
       if (day === 0 || day === 6) session = 'CLOSED';
       else if (mins < 9 * 60) session = 'PRE-MARKET';
@@ -964,13 +992,7 @@ export function startDashboard(port = 3777) {
     try {
       getDb();
       // Return empty outside market hours (9:15 - 15:30 IST, Mon-Fri)
-      const ist = new Date(
-        new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }),
-      );
-      const day = ist.getDay();
-      const mins = ist.getHours() * 60 + ist.getMinutes();
-      const marketOpen = mins >= 9 * 60 + 15 && mins < 15 * 60 + 30;
-      if (day === 0 || day === 6 || !marketOpen) {
+      if (!isMarketHoursIST(9, 15, 15, 30)) {
         screenerCache.data = null;
         screenerCache.ts = 0;
         return res.json({
@@ -1304,13 +1326,7 @@ export function startDashboard(port = 3777) {
   let pumpTick = 0;
 
   function isMarketOpen() {
-    const ist = new Date(
-      new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }),
-    );
-    const day = ist.getDay();
-    if (day === 0 || day === 6) return false;
-    const mins = ist.getHours() * 60 + ist.getMinutes();
-    return mins >= 9 * 60 && mins < 16 * 60; // 9:00 - 16:00 (include pre/post)
+    return isMarketOpenIST();
   }
 
   function startPump() {
