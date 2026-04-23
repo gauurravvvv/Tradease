@@ -72,9 +72,8 @@ export function startDashboard(port = 3777) {
         const pnl = t.type === 'CALL'
           ? (currentPrice - t.entry_price) * t.lot_size * t.quantity
           : (t.entry_price - currentPrice) * t.lot_size * t.quantity;
-        const pnlPct = t.entry_price
-          ? ((currentPrice - t.entry_price) / t.entry_price * 100)
-          : 0;
+        const rawPct = t.entry_price ? ((currentPrice - t.entry_price) / t.entry_price * 100) : 0;
+        const pnlPct = t.type === 'PUT' ? -rawPct : rawPct;
         return { ...t, live_pnl: pnl, live_pnl_pct: pnlPct };
       });
       res.json(enriched);
@@ -293,7 +292,8 @@ export function startDashboard(port = 3777) {
         const pnl = t.type === 'CALL'
           ? (cp - t.entry_price) * t.lot_size * t.quantity
           : (t.entry_price - cp) * t.lot_size * t.quantity;
-        const pnlPct = t.entry_price ? ((cp - t.entry_price) / t.entry_price * 100) : 0;
+        const rawPct = t.entry_price ? ((cp - t.entry_price) / t.entry_price * 100) : 0;
+        const pnlPct = t.type === 'PUT' ? -rawPct : rawPct;
         return { ...t, live_pnl: pnl, live_pnl_pct: pnlPct };
       });
 
@@ -414,7 +414,7 @@ export function startDashboard(port = 3777) {
         symbol: symbol.toUpperCase(), type: type.toUpperCase(),
         entryPrice: Number(entryPrice), premium: Number(premium || entryPrice * 0.02),
         lotSize: Number(lotSize), stopLoss: Number(stopLoss),
-        target1: Number(target1 || 0), target2: Number(target2 || 0),
+        target1: target1 ? Number(target1) : null, target2: target2 ? Number(target2) : null,
         confidence: Number(confidence || 70), reason: reason || 'Manual UI entry',
         expiry, strike: strike ? Number(strike) : undefined,
       });
@@ -723,8 +723,9 @@ export function startDashboard(port = 3777) {
 
       // Filter to actionable picks with trade params
       const portfolio = getPortfolioSummary();
+      const openSymbols = new Set(getOpenTrades().map(t => t.symbol));
       const actionable = picks
-        .filter(p => p.recommendation === 'CALL' || p.recommendation === 'PUT')
+        .filter(p => (p.recommendation === 'CALL' || p.recommendation === 'PUT') && !openSymbols.has(p.symbol))
         .slice(0, 8)
         .map(p => {
           const atr = p.atr || 0;
@@ -742,7 +743,7 @@ export function startDashboard(port = 3777) {
             riskReward: sl && targets ? Math.abs(targets.target1 - p.price) / Math.abs(p.price - sl) : null,
             maxLots: posSize.lots,
             capitalRequired: posSize.capitalRequired,
-            canTrade: portfolio.openPositions < 3 && posSize.lots > 0,
+            canTrade: !openSymbols.has(p.symbol) && portfolio.openPositions < 3 && posSize.lots > 0,
           };
         });
 
@@ -812,10 +813,10 @@ export function startDashboard(port = 3777) {
         const status = agents.map(name => {
           const stats = db.prepare(
             `SELECT COUNT(*) as runs, SUM(skipped) as skipped, SUM(tokens_in + tokens_out) as tokens
-             FROM agent_logs WHERE agent = ? AND created_at > datetime('now', '-1 hour')`
+             FROM agent_logs WHERE agent = ? AND created_at > datetime('now', '+5 hours', '+30 minutes', '-1 hour')`
           ).get(name);
           const errors = db.prepare(
-            `SELECT COUNT(*) as count FROM agent_logs WHERE agent = ? AND action = 'error' AND created_at > datetime('now', '-1 hour')`
+            `SELECT COUNT(*) as count FROM agent_logs WHERE agent = ? AND action = 'error' AND created_at > datetime('now', '+5 hours', '+30 minutes', '-1 hour')`
           ).get(name);
           const last = db.prepare(
             'SELECT action, symbol, details, created_at FROM agent_logs WHERE agent = ? ORDER BY created_at DESC LIMIT 1'
@@ -915,7 +916,8 @@ export function startDashboard(port = 3777) {
         const pnl = t.type === 'CALL'
           ? (cp - t.entry_price) * t.lot_size * t.quantity
           : (t.entry_price - cp) * t.lot_size * t.quantity;
-        const pnlPct = t.entry_price ? ((cp - t.entry_price) / t.entry_price * 100) : 0;
+        const rawPct = t.entry_price ? ((cp - t.entry_price) / t.entry_price * 100) : 0;
+        const pnlPct = t.type === 'PUT' ? -rawPct : rawPct;
         return { ...t, current_price: cp, live_pnl: pnl, live_pnl_pct: pnlPct };
       });
       res.json(enriched);
@@ -973,14 +975,22 @@ export function startDashboard(port = 3777) {
               try { const q = await getQuote(sym); quotes[sym] = q.price; } catch {}
             })
           );
+          // Update DB current_price so portfolio summary uses fresh prices
+          const db = getDb();
+          const updateStmt = db.prepare('UPDATE trades SET current_price = ? WHERE id = ? AND status = ?');
+          const updateMany = db.transaction((items) => { for (const { id, cp } of items) updateStmt.run(cp, id, 'OPEN'); });
+          const updates = [];
           const enriched = trades.map(t => {
             const cp = quotes[t.symbol] || t.current_price || t.entry_price;
+            if (quotes[t.symbol]) updates.push({ id: t.id, cp });
             const pnl = t.type === 'CALL'
               ? (cp - t.entry_price) * t.lot_size * t.quantity
               : (t.entry_price - cp) * t.lot_size * t.quantity;
-            const pnlPct = t.entry_price ? ((cp - t.entry_price) / t.entry_price * 100) : 0;
+            const rawPct = t.entry_price ? ((cp - t.entry_price) / t.entry_price * 100) : 0;
+            const pnlPct = t.type === 'PUT' ? -rawPct : rawPct;
             return { id: t.id, symbol: t.symbol, type: t.type, entry_price: t.entry_price, current_price: cp, stop_loss: t.stop_loss, target1: t.target1, target2: t.target2, t1_hit: t.t1_hit, t2_hit: t.t2_hit, quantity: t.quantity, capital_used: t.capital_used, live_pnl: pnl, live_pnl_pct: pnlPct };
           });
+          if (updates.length) updateMany(updates);
           broadcast('trades', enriched);
         }
 

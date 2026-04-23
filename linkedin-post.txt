@@ -1,0 +1,46 @@
+The best traders I know don't trade emotionally. They follow rules. Every single time.
+
+I realized I couldn't do that -- but a machine could.
+
+So I stopped trading. And built something that trades the way I wish I could.
+
+Tradease -- an AI-powered autonomous trading system for Indian F&O markets. You start it. You walk away.
+
+3 AI agents run in the background:
+
+The Strategist -- scans 180+ F&O stocks across 9 factors, confirms signals on multiple timeframes, enters the trade. No hesitation.
+
+The Guardian -- monitors every position every 2 minutes. SL hit? Exit. Target hit? Book profits. Nifty crashes? Exit everything. 3:15 PM? Close all. Zero emotion.
+
+The Sentinel -- reads news in real-time. Bearish on your holding? Signals the Guardian. Bullish on a candidate? Boosts entry signal.
+
+They talk through a signal database. No human in the loop.
+
+What's packed inside:
+
+-> Adaptive trailing stops (reads RSI + MACD momentum)
+-> Multi-timeframe confluence (5m, 15m, 1h, daily)
+-> Real-time dashboard -- live charts, equity curve, risk panel, agent monitor
+-> Backtesting -- 3 strategies, Sharpe ratio, drawdown, profit factor
+-> Auto trade journal with tags and ratings
+-> Telegram alerts for every entry, exit, stop-loss, target hit
+-> Hard risk rules -- max 3 positions, 20% per trade, ATR stops. Non-negotiable.
+-> 90%+ decisions are rule-based. AI called only for edge cases -- 2-3x/day, cheapest model.
+
+Tech: Node.js, Claude AI, Yahoo Finance, SQLite. ~6,000 lines. One command: tradease daemon
+
+Current status: Testing phase -- paper trading with Rs 2,00,000 virtual capital. Monitoring how agents behave, what they pick, where the logic breaks.
+
+What's next: Integrate with a real demat account -- start small, limited capital, let it trade live. The risk management is already built for it. Just needs enough testing cycles.
+
+Open source. Looking for:
+-> Code reviews and architecture feedback
+-> Strategy ideas and risk improvements
+-> Collaboration on broker integration
+-> Or just a star if you find it interesting
+
+GitHub: https://github.com/gauurravvvv/Tradease
+
+If you've ever felt the market moves faster than your morning analysis -- this was built for that feeling.
+
+#Trading #AI #OpenSource #FinTech #IndianStockMarket #FnO #AlgoTrading #BuildInPublic #NSE

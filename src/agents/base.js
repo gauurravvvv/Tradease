@@ -11,13 +11,11 @@ export class BaseAgent {
    * @param {string} name - Agent identifier (e.g. 'news-sentinel')
    * @param {object} opts
    * @param {number} opts.intervalMs - Tick interval in ms
-   * @param {number} opts.maxOutputTokens - Max output tokens for Claude calls
    * @param {string} [opts.model] - Claude model to use (null = default, 'claude-haiku-4-5-20251001' for cheap)
    */
-  constructor(name, { intervalMs, maxOutputTokens = 500, model = null }) {
+  constructor(name, { intervalMs, model = null }) {
     this.name = name;
     this.intervalMs = intervalMs;
-    this.maxOutputTokens = maxOutputTokens;
     this.model = model;
     this._timer = null;
     this._running = false;
@@ -75,7 +73,6 @@ export class BaseAgent {
     this._stats.claudeCalls++;
     const response = await askClaude(prompt, {
       timeout: 60_000,
-      maxTokens: this.maxOutputTokens,
       model: this.model,
     });
     const tokensIn = Math.ceil(prompt.length / 4);
@@ -121,7 +118,7 @@ export class BaseAgent {
     const db = getDb();
     const ph = ids.map(() => '?').join(',');
     db.prepare(
-      `UPDATE agent_signals SET consumed = 1, consumed_by = ?, consumed_at = datetime('now') WHERE id IN (${ph})`
+      `UPDATE agent_signals SET consumed = 1, consumed_by = ?, consumed_at = datetime('now', '+5 hours', '+30 minutes') WHERE id IN (${ph})`
     ).run(this.name, ...ids);
   }
 

@@ -16,7 +16,6 @@ export class NewsSentinel extends BaseAgent {
   constructor() {
     super('news-sentinel', {
       intervalMs: FIVE_MINUTES,
-      maxOutputTokens: 400,
       model: 'claude-haiku-4-5-20251001',
     });
 

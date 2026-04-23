@@ -23,8 +23,8 @@ export function initJournalTable() {
       ai_review TEXT,
       rating INTEGER,
       lessons TEXT,
-      created_at DATETIME DEFAULT (datetime('now')),
-      updated_at DATETIME DEFAULT (datetime('now'))
+      created_at DATETIME DEFAULT (datetime('now', '+5 hours', '+30 minutes')),
+      updated_at DATETIME DEFAULT (datetime('now', '+5 hours', '+30 minutes'))
     )
   `);
 }
@@ -103,7 +103,7 @@ export function getJournalEntries(opts = {}) {
   initJournalTable();
 
   const { days = 30, symbol, tag } = opts;
-  let query = `SELECT * FROM trade_journal WHERE created_at >= datetime('now', '-${days} days')`;
+  let query = `SELECT * FROM trade_journal WHERE created_at >= datetime('now', '+5 hours', '+30 minutes', '-${days} days')`;
   const params = {};
 
   if (symbol) {
@@ -137,7 +137,7 @@ export function updateJournalEntry(id, updates) {
 
   if (!sets.length) return;
 
-  sets.push("updated_at = datetime('now')");
+  sets.push("updated_at = datetime('now', '+5 hours', '+30 minutes')");
   db.prepare(`UPDATE trade_journal SET ${sets.join(', ')} WHERE id = @id`).run(params);
 }
 
@@ -152,7 +152,7 @@ export function getJournalStats(days = 30) {
 
   const entries = db.prepare(`
     SELECT pnl, tags, rating FROM trade_journal
-    WHERE created_at >= datetime('now', '-${days} days')
+    WHERE created_at >= datetime('now', '+5 hours', '+30 minutes', '-${days} days')
   `).all();
 
   if (!entries.length) {
@@ -191,7 +191,7 @@ export function autoJournalRecentTrades() {
   const closedTrades = db.prepare(`
     SELECT * FROM trades
     WHERE status IN ('CLOSED', 'STOPPED')
-      AND exited_at >= datetime('now', '-1 day')
+      AND exited_at >= datetime('now', '+5 hours', '+30 minutes', '-1 day')
     ORDER BY exited_at DESC
   `).all();
 

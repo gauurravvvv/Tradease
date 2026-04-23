@@ -22,7 +22,6 @@ export class TradeStrategist extends BaseAgent {
   constructor() {
     super('trade-strategist', {
       intervalMs: TEN_MINUTES,
-      maxOutputTokens: 600,
       model: 'claude-haiku-4-5-20251001',
     });
     this._screenerCache = null;

@@ -129,10 +129,11 @@ export function exitTrade(tradeId, exitPrice, reason) {
     throw new Error(`No open trade found with id ${tradeId}`);
   }
 
-  const pnl =
+  const closingPnl =
     trade.type === 'CALL'
       ? (exitPrice - trade.entry_price) * trade.lot_size * trade.quantity
       : (trade.entry_price - exitPrice) * trade.lot_size * trade.quantity;
+  const pnl = (trade.pnl ?? 0) + closingPnl;
 
   db.prepare(`
     UPDATE trades
@@ -140,7 +141,7 @@ export function exitTrade(tradeId, exitPrice, reason) {
         exit_price  = @exitPrice,
         pnl         = @pnl,
         exit_reason = @reason,
-        exited_at   = datetime('now')
+        exited_at   = datetime('now', '+5 hours', '+30 minutes')
     WHERE id = @id
   `).run({ id: tradeId, exitPrice, pnl, reason });
 
@@ -252,10 +253,11 @@ export function stopTrade(tradeId, currentPrice) {
     throw new Error(`No open trade found with id ${tradeId}`);
   }
 
-  const pnl =
+  const closingPnl =
     trade.type === 'CALL'
       ? (currentPrice - trade.entry_price) * trade.lot_size * trade.quantity
       : (trade.entry_price - currentPrice) * trade.lot_size * trade.quantity;
+  const pnl = (trade.pnl ?? 0) + closingPnl;
 
   db.prepare(`
     UPDATE trades
@@ -263,7 +265,7 @@ export function stopTrade(tradeId, currentPrice) {
         exit_price  = @exitPrice,
         pnl         = @pnl,
         exit_reason = 'Stop-loss triggered',
-        exited_at   = datetime('now')
+        exited_at   = datetime('now', '+5 hours', '+30 minutes')
     WHERE id = @id
   `).run({ id: tradeId, exitPrice: currentPrice, pnl });
 
@@ -297,7 +299,7 @@ export function getTradeHistory(days = 30) {
     .prepare(
       `SELECT * FROM trades
        WHERE status IN ('CLOSED', 'STOPPED')
-         AND exited_at >= datetime('now', '-' || @days || ' days')
+         AND exited_at >= datetime('now', '+5 hours', '+30 minutes', '-' || @days || ' days')
        ORDER BY exited_at DESC`
     )
     .all({ days });

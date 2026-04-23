@@ -105,10 +105,10 @@ export class AgentOrchestrator {
     return agents.map(name => {
       const stats = db.prepare(
         `SELECT COUNT(*) as runs, SUM(skipped) as skipped, SUM(tokens_in + tokens_out) as tokens
-         FROM agent_logs WHERE agent = ? AND created_at > datetime('now', '-1 hour')`
+         FROM agent_logs WHERE agent = ? AND created_at > datetime('now', '+5 hours', '+30 minutes', '-1 hour')`
       ).get(name);
       const errors = db.prepare(
-        `SELECT COUNT(*) as count FROM agent_logs WHERE agent = ? AND action = 'error' AND created_at > datetime('now', '-1 hour')`
+        `SELECT COUNT(*) as count FROM agent_logs WHERE agent = ? AND action = 'error' AND created_at > datetime('now', '+5 hours', '+30 minutes', '-1 hour')`
       ).get(name);
       const last = db.prepare(
         'SELECT action, symbol, details, created_at FROM agent_logs WHERE agent = ? ORDER BY created_at DESC LIMIT 1'
@@ -132,7 +132,7 @@ export class AgentOrchestrator {
     const db = getDb();
     const row = db.prepare(
       `SELECT SUM(tokens_in) as input, SUM(tokens_out) as output, COUNT(*) as calls
-       FROM agent_logs WHERE action = 'claude_call' AND created_at > datetime('now', 'start of day')`
+       FROM agent_logs WHERE action = 'claude_call' AND created_at > datetime('now', '+5 hours', '+30 minutes', 'start of day')`
     ).get();
     return { input: row?.input || 0, output: row?.output || 0, calls: row?.calls || 0 };
   }

@@ -56,7 +56,7 @@ function shouldExit(trade, currentPrice) {
   // 5. Check if trailing stop needs update
   if (pnlPct >= TRADING.TRAILING_TRIGGER_PCT) {
     // Price has moved favorably — check if trailing stop needs tightening
-    const trailingDistance = entry_price * (TRADING.TRAILING_STOP_ATR / 100);
+    const trailingDistance = entry_price * (TRADING.TRAILING_TRIGGER_PCT / 100);
     let newTrailing;
 
     if (type === 'CALL') {

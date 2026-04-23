@@ -4,16 +4,15 @@ import { spawn } from 'child_process';
  * Call Claude CLI in non-interactive mode and return the response text.
  *
  * @param {string} prompt - The prompt to send.
- * @param {object} options - { timeout, maxTokens }
+ * @param {object} options - { timeout, model }
  * @returns {Promise<string>} Claude's response text.
  */
 export async function askClaude(prompt, options = {}) {
-  const { timeout = 120_000, maxTokens = 4000, model = null } = options;
+  const { timeout = 120_000, model = null } = options;
 
   return new Promise((resolve, reject) => {
     const args = ['--print'];
     if (model) args.push('--model', model);
-    if (maxTokens) args.push('--max-tokens', String(maxTokens));
     args.push('-p', prompt);
     const env = { ...process.env };
     delete env.CLAUDECODE;
@@ -481,7 +480,7 @@ export async function interpretNews(newsItems, symbol) {
   ].join('\n');
 
   try {
-    const raw = await askClaude(prompt, { timeout: 60_000, maxTokens: 1500 });
+    const raw = await askClaude(prompt, { timeout: 60_000 });
     return extractJson(raw);
   } catch (err) {
     console.error('[claude] interpretNews failed:', err.message);
@@ -538,7 +537,7 @@ export async function generateExitAnalysis(trade, currentMarketData) {
   ].join('\n');
 
   try {
-    const raw = await askClaude(prompt, { timeout: 60_000, maxTokens: 1500 });
+    const raw = await askClaude(prompt, { timeout: 60_000 });
     return extractJson(raw);
   } catch (err) {
     console.error('[claude] generateExitAnalysis failed:', err.message);

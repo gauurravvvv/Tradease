@@ -18,7 +18,6 @@ export class PositionGuardian extends BaseAgent {
   constructor() {
     super('position-guardian', {
       intervalMs: 2 * 60 * 1000, // 2 minutes
-      maxOutputTokens: 400,
       model: 'claude-haiku-4-5-20251001',
     });
     this._lastIndexCheck = 0;

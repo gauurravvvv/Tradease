@@ -47,6 +47,7 @@ export function calculatePositionSize(capital, price, lotSize) {
  * @returns {number} Stop-loss price
  */
 export function calculateStopLoss(entryPrice, atr, type) {
+  if (!atr || !entryPrice) return null;
   if (type === 'CALL') {
     return Math.round((entryPrice - atr * ATR_STOP_MULTIPLIER) * 100) / 100;
   }
@@ -123,7 +124,7 @@ function computeMomentumMultiplier(momentum, type) {
  * @returns {number|null} Trailing stop price, or null if not yet triggered
  */
 export function calculateTrailingStop(entryPrice, currentPrice, atr, type, momentum = null) {
-  if (!entryPrice) return null;
+  if (!entryPrice || !atr) return null;
 
   const profitPct = type === 'CALL'
     ? ((currentPrice - entryPrice) / entryPrice) * 100
@@ -177,10 +178,11 @@ export function validateTrade(trade, portfolio) {
     return { valid: false, reason: `Already have open position in ${trade.symbol}` };
   }
 
-  // Check market hours — no new entries after NO_NEW_ENTRY_AFTER
+  // Check market hours — no new entries after NO_NEW_ENTRY_AFTER (IST)
   const now = new Date();
+  const ist = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
   const [cutoffHour, cutoffMin] = NO_NEW_ENTRY_AFTER.split(':').map(Number);
-  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  const currentMinutes = ist.getHours() * 60 + ist.getMinutes();
   const cutoffMinutes = cutoffHour * 60 + cutoffMin;
 
   if (currentMinutes >= cutoffMinutes) {
@@ -220,15 +222,17 @@ export function shouldExit(trade, currentPrice, atr) {
   }
 
   // Check target2 hit (exit remaining runner portion)
-  if (type === 'CALL' && currentPrice >= target2) {
-    return { shouldExit: true, reason: `Target 2 hit at ₹${target2}`, action: 'PARTIAL_T2' };
-  }
-  if (type === 'PUT' && currentPrice <= target2) {
-    return { shouldExit: true, reason: `Target 2 hit at ₹${target2}`, action: 'PARTIAL_T2' };
+  if (target2) {
+    if (type === 'CALL' && currentPrice >= target2) {
+      return { shouldExit: true, reason: `Target 2 hit at ₹${target2}`, action: 'PARTIAL_T2' };
+    }
+    if (type === 'PUT' && currentPrice <= target2) {
+      return { shouldExit: true, reason: `Target 2 hit at ₹${target2}`, action: 'PARTIAL_T2' };
+    }
   }
 
   // Check target1 hit (partial exit if not already done)
-  if (!trade.t1Hit) {
+  if (target1 && !trade.t1_hit) {
     if (type === 'CALL' && currentPrice >= target1) {
       return { shouldExit: true, reason: `Target 1 hit at ₹${target1}`, action: 'PARTIAL_T1' };
     }

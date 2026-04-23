@@ -298,6 +298,7 @@
     .perf-toggle{padding:4px 12px;font-size:0.6rem;border-radius:4px;border:1px solid var(--card-border);background:transparent;color:var(--text-dim);cursor:pointer;font-family:inherit}
     .perf-toggle.active{background:rgba(6,182,212,0.15);border-color:var(--cyan);color:var(--cyan)}
     @media(max-width:900px){.risk-grid{grid-template-columns:1fr}.perf-charts{grid-template-columns:1fr}.risk-metrics{grid-template-columns:repeat(2,1fr) !important}}
+    .refresh-countdown{font-size:0.55rem;color:var(--text-dim);opacity:0.7;padding:2px 6px;border-radius:3px;background:rgba(255,255,255,0.03);white-space:nowrap;font-variant-numeric:tabular-nums}
   </style>
   <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
 </head>
@@ -347,8 +348,8 @@
   <div class="card"><div class="card-title">Nifty 50</div><div class="card-value" id="nifty-price">--</div><div class="card-sub" id="nifty-change">--</div></div>
   <div class="card"><div class="card-title">Bank Nifty</div><div class="card-value" id="banknifty-price">--</div><div class="card-sub" id="banknifty-change">--</div></div>
   <div class="card"><div class="card-title">India VIX</div><div class="card-value" id="vix-price">--</div><div class="card-sub" id="vix-change">--</div></div>
-  <div class="card"><div class="card-title">Capital</div><div class="card-value" id="total-capital">--</div><div class="card-sub" id="available-capital">--</div></div>
-  <div class="card"><div class="card-title">Unrealized P&L</div><div class="card-value" id="unrealized-pnl">--</div><div class="card-sub" id="market-severity">--</div></div>
+  <div class="card"><div class="card-title">Net Worth</div><div class="card-value" id="total-capital">--</div><div class="card-sub" id="available-capital">--</div></div>
+  <div class="card"><div class="card-title">Unrealized P&L <span class="refresh-countdown" id="cd-pnl"></span></div><div class="card-value" id="unrealized-pnl">--</div><div class="card-sub" id="market-severity">--</div></div>
   <div class="card"><div class="card-title">Positions</div><div class="card-value" id="open-positions">--</div><div class="card-sub">/ 3 max</div></div>
 </div>
 
@@ -358,6 +359,7 @@
     <span class="section-title" style="font-size:0.9rem"><span class="chevron">▼</span>Recommended Trades</span>
     <div class="section-actions">
       <span class="badge badge-cyan" id="recs-badge">--</span>
+      <span class="refresh-countdown" id="cd-recs"></span>
       <button class="btn btn-sm btn-primary" onclick="runScan();event.stopPropagation()">Scan Now</button>
       <div class="section-spinner" id="spin-recs"></div>
     </div>
@@ -374,6 +376,7 @@
     <div class="section-actions">
       <span class="badge badge-purple" id="agent-status-badge">offline</span>
       <span class="badge badge-gray" id="agent-token-badge">0 tokens today</span>
+      <span class="refresh-countdown" id="cd-agents"></span>
       <div class="section-spinner" id="spin-agents"></div>
     </div>
   </div>
@@ -396,6 +399,7 @@
     <span class="section-title"><span class="chevron">▼</span>Risk Dashboard</span>
     <div class="section-actions">
       <span class="badge badge-gray" id="risk-heat-badge">No positions</span>
+      <span class="refresh-countdown" id="cd-risk"></span>
     </div>
   </div>
   <div class="section-content">
@@ -431,6 +435,7 @@
     <div class="section-actions">
       <span class="badge badge-green" id="trade-count">0 active</span>
       <span class="badge badge-live" style="font-size:0.5rem">LIVE</span>
+      <span class="refresh-countdown" id="cd-trades"></span>
       <button class="btn btn-green btn-sm" onclick="openTradeWizard();event.stopPropagation()">+ New</button>
       <div class="section-spinner" id="spin-trades"></div>
     </div>
@@ -448,6 +453,7 @@
       <div class="section-actions">
         <span class="badge badge-live" style="font-size:0.5rem">LIVE</span>
         <span class="badge badge-gray" id="live-news-count">--</span>
+        <span class="refresh-countdown" id="cd-live-news"></span>
         <div class="section-spinner" id="spin-live-news"></div>
       </div>
     </div>
@@ -458,7 +464,7 @@
   <div class="section">
     <div class="section-header" onclick="toggleSection(this)">
       <span class="section-title"><span class="chevron">▼</span>Global Markets</span>
-      <div class="section-actions"><span class="badge badge-gray" id="mood-badge">--</span><div class="section-spinner" id="spin-market"></div></div>
+      <div class="section-actions"><span class="badge badge-gray" id="mood-badge">--</span><span class="refresh-countdown" id="cd-market"></span><div class="section-spinner" id="spin-market"></div></div>
     </div>
     <div class="section-content">
     <div id="global-container"><div class="loading" style="height:200px"></div></div>
@@ -487,7 +493,7 @@
 <div class="section">
   <div class="section-header" onclick="toggleSection(this)">
     <span class="section-title"><span class="chevron">▼</span>All Screener Picks</span>
-    <div class="section-actions"><span class="badge badge-cyan" id="picks-badge">--</span><div class="section-spinner" id="spin-picks"></div></div>
+    <div class="section-actions"><span class="badge badge-cyan" id="picks-badge">--</span><span class="refresh-countdown" id="cd-picks"></span><div class="section-spinner" id="spin-picks"></div></div>
   </div>
   <div class="section-content">
   <div id="picks-container"><div class="loading" style="height:200px"></div></div>
@@ -498,7 +504,7 @@
 <div class="section">
   <div class="section-header" onclick="toggleSection(this)">
     <span class="section-title"><span class="chevron">▼</span>Stock News & Sentiment</span>
-    <div class="section-actions"><span class="badge badge-gray" id="news-badge">--</span><div class="section-spinner" id="spin-news"></div></div>
+    <div class="section-actions"><span class="badge badge-gray" id="news-badge">--</span><span class="refresh-countdown" id="cd-news"></span><div class="section-spinner" id="spin-news"></div></div>
   </div>
   <div class="section-content">
   <div id="news-container"><div class="loading" style="height:150px"></div></div>
@@ -815,20 +821,20 @@ function connectSSE(){
       // Track P&L per trade for exit sound decisions
       trades.forEach(t=>{_prevTradePnls[t.id]=t.live_pnl||0});
       _prevTradeIds=currentIds;
-      renderTradesLive(trades);
+      renderTradesLive(trades);resetCd('trades');
     }catch{}
   });
   sse.addEventListener('portfolio',e=>{
-    try{const p=JSON.parse(e.data);updatePortfolioCards(p)}catch{}
+    try{const p=JSON.parse(e.data);updatePortfolioCards(p);resetCd('pnl')}catch{}
   });
   sse.addEventListener('indices',e=>{
-    try{const idx=JSON.parse(e.data);updateIndexCards(idx)}catch{}
+    try{const idx=JSON.parse(e.data);updateIndexCards(idx);resetCd('market')}catch{}
   });
   sse.addEventListener('news',e=>{
-    try{const news=JSON.parse(e.data);renderLiveNewsFromSSE(news)}catch{}
+    try{const news=JSON.parse(e.data);renderLiveNewsFromSSE(news);resetCd('live-news')}catch{}
   });
   sse.addEventListener('agents',e=>{
-    try{const d=JSON.parse(e.data);if(d.logs)renderAgentLogs(d.logs);if(d.running!=null){_agentsRunning=d.running;const sb=document.getElementById('agent-status-badge');sb.textContent=d.running?'RUNNING':'OFFLINE';sb.className='badge '+(d.running?'badge-purple':'badge-gray')}}catch{}
+    try{const d=JSON.parse(e.data);if(d.logs)renderAgentLogs(d.logs);if(d.running!=null){_agentsRunning=d.running;const sb=document.getElementById('agent-status-badge');sb.textContent=d.running?'RUNNING':'OFFLINE';sb.className='badge '+(d.running?'badge-purple':'badge-gray')}resetCd('agents')}catch{}
   });
 }
 connectSSE();
@@ -839,14 +845,18 @@ function flashEl(el,direction){el.classList.remove('flash-green','flash-red');vo
 
 function updatePortfolioCards(p){
   if(!p)return;
-  document.getElementById('total-capital').textContent=INR(p.totalCapital);
-  document.getElementById('available-capital').textContent=`${INR(p.availableCapital)} free`;
+  const nw=p.netWorth||p.totalCapital;
+  const nwEl=document.getElementById('total-capital');
+  nwEl.textContent=INR(nw);nwEl.className=`card-value ${nw>=p.totalCapital?'text-green':'text-red'}`;
+  document.getElementById('available-capital').textContent=`${INR(p.availableCapital)} free of ${INR(p.totalCapital)}`;
   const pe=document.getElementById('unrealized-pnl');
   const prev=parseFloat(pe.dataset.val||0);
   pe.textContent=INR(p.unrealizedPnl);pe.className=`card-value ${pc(p.unrealizedPnl||0)}`;
   if(prev!==p.unrealizedPnl)flashEl(pe.parentElement,p.unrealizedPnl-prev);
   pe.dataset.val=p.unrealizedPnl||0;
   document.getElementById('open-positions').textContent=p.openPositions||0;
+  // Update browser title with P&L
+  _titlePnl=p.unrealizedPnl||0;_titlePositions=p.openPositions||0;
   // Today's P&L in header (unrealized + realized if available)
   const todayPnl=(p.unrealizedPnl||0)+(p.realizedPnl||0);
   const tpEl=document.getElementById('today-pnl');
@@ -888,8 +898,8 @@ function renderTradesLive(trades){
       <td>${INR2(t.entry_price)}</td>
       <td class="${flashClass}" style="font-weight:600">${INR2(t.current_price||t.entry_price)}</td>
       <td class="text-red">${INR2(t.stop_loss)}</td>
-      <td class="text-green">${INR2(t.target1)}</td>
-      <td>T1:${t.t1_hit?'&#10003;':'&middot;'} T2:${t.t2_hit?'&#10003;':'&middot;'}</td>
+      <td class="text-green">${INR2(t.target1)} ${t.t1_hit?'&#10003;':''}</td>
+      <td class="text-green">${INR2(t.target2)} ${t.t2_hit?'&#10003;':''}</td>
       <td class="${pc(pnl)}" style="font-weight:600">${INR(pnl)} (${pct(pp)})<span class="pnl-bar" style="width:${bw}px;background:${pnl>=0?'var(--green)':'var(--red)'}"></span></td>
       <td class="text-dim">${t.quantity||1}L</td>
       <td>${INR(t.capital_used)}</td>
@@ -899,7 +909,7 @@ function renderTradesLive(trades){
         <button class="btn btn-sm" onclick="openExitModal(${t.id},'${t.symbol}','partial')" style="margin-left:2px">50%</button>
       </td>
     </tr><tr><td colspan="11" style="padding:0;border:none"><div class="trade-chart-area" id="chart-area-${safeSymbol}"></div></td></tr>`}).join('');
-  el.innerHTML=`<table><thead><tr><th>Symbol</th><th>Type</th><th>Entry</th><th>CMP</th><th>SL</th><th>T1</th><th>Targets</th><th>P&L</th><th>Qty</th><th>Capital</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table>`;
+  el.innerHTML=`<table><thead><tr><th>Symbol</th><th>Type</th><th>Entry</th><th>CMP</th><th>SL</th><th>T1</th><th>T2</th><th>P&L</th><th>Qty</th><th>Capital</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table>`;
   document.getElementById('last-updated').textContent=`Live: ${new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}`;
 }
 
@@ -960,7 +970,7 @@ function renderRecommendations(data){
     return`<div class="rec-card" style="border-left:3px solid ${typeColor}">
       <div class="rec-card-header"><div><div class="rec-card-symbol" onclick="openResearchFor('${r.symbol}')">${r.symbol}</div><div class="rec-card-sector">${r.name||r.sector||''}</div></div><div style="text-align:right"><span class="badge ${typeBadge}" style="font-size:0.7rem">${r.recommendation}</span><div style="margin-top:4px"><span style="background:${scColor};color:var(--bg);padding:2px 8px;border-radius:4px;font-size:0.7rem;font-weight:700">${sc}</span></div></div></div>
       <div class="rec-card-price"><span style="font-size:1.1rem;font-weight:700">₹${r.price?.toLocaleString('en-IN')}</span><span class="${pc(r.changePct||0)}" style="font-size:0.8rem">${pct(r.changePct)}</span></div>
-      <div class="rec-card-levels"><div class="rec-level"><div class="rec-level-label">Entry</div><div class="rec-level-value">₹${r.entry?.toFixed(1)}</div></div><div class="rec-level"><div class="rec-level-label">Stop Loss</div><div class="rec-level-value text-red">₹${r.stopLoss?.toFixed(1)||'--'}</div></div><div class="rec-level"><div class="rec-level-label">Target 1</div><div class="rec-level-value text-green">₹${r.target1?.toFixed(1)||'--'}</div></div></div>
+      <div class="rec-card-levels"><div class="rec-level"><div class="rec-level-label">Entry</div><div class="rec-level-value">₹${r.entry?.toFixed(1)}</div></div><div class="rec-level"><div class="rec-level-label">Stop Loss</div><div class="rec-level-value text-red">₹${r.stopLoss?.toFixed(1)||'--'}</div></div><div class="rec-level"><div class="rec-level-label">T1</div><div class="rec-level-value text-green">₹${r.target1?.toFixed(1)||'--'}</div></div><div class="rec-level"><div class="rec-level-label">T2</div><div class="rec-level-value text-green">₹${r.target2?.toFixed(1)||'--'}</div></div></div>
       <div class="rec-rr"><span class="text-dim" style="font-size:0.6rem;min-width:50px" data-tip="Risk:Reward ratio">R:R ${rr}x</span><div class="rec-rr-bar"><div class="rec-rr-fill" style="width:${rrPct}%;background:${rrPct>50?'var(--green)':rrPct>25?'var(--yellow)':'var(--red)'}"></div></div></div>
       <div class="rec-card-meta">${r.rsi!=null?`<span class="rec-meta-tag">RSI ${r.rsi?.toFixed(0)}</span>`:''} ${r.macdTrend?`<span class="rec-meta-tag">${r.macdTrend.replace('_',' ')}</span>`:''} ${r.volumeRatio?`<span class="rec-meta-tag">Vol ${r.volumeRatio.toFixed(1)}x</span>`:''}<span class="rec-meta-tag">Lot: ${r.lotSize||1}</span></div>
       <div style="display:flex;gap:8px"><button class="btn ${isCall?'btn-green':'btn-red'} btn-lg" style="flex:1" ${canTrade?'':`disabled title="Max positions or no capital"`} onclick="quickTrade('${r.symbol}','${r.recommendation}',${r.entry||r.price},${r.stopLoss||0},${r.target1||0},${r.target2||0},${r.lotSize||1},${r.score||70})">Take ${r.recommendation}</button><button class="btn btn-sm" onclick="openResearchFor('${r.symbol}')">Details</button></div>
@@ -1529,18 +1539,48 @@ async function initialLoad(){
   loadJournal();
 }
 function updateTimestamp(){document.getElementById('last-updated').textContent=`Live: ${new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}`}
-async function refreshAll(){await Promise.all([loadDashboard(),loadMarketStatus(),loadRecommendations(),loadPicks(),loadLiveNews(),loadAgentStatus(),loadRiskDashboard()]);loadNews();loadJournal();updateTimestamp();toast('Dashboard refreshed','info',2000)}
+async function refreshAll(){await Promise.all([loadDashboard(),loadMarketStatus(),loadRecommendations(),loadPicks(),loadLiveNews(),loadAgentStatus(),loadRiskDashboard()]);loadNews();loadJournal();updateTimestamp();for(const k in _cdTimers)resetCd(k);toast('Dashboard refreshed','info',2000)}
 
 initialLoad();
-// Fallback polling (SSE handles most live updates)
-setInterval(loadDashboard,60000);
-setInterval(loadMarketStatus,120000);
-setInterval(loadRecommendations,600000);
-setInterval(loadAgentStatus,30000);
-setInterval(loadRiskDashboard,30000);
-setInterval(loadLiveNews,300000);
-setInterval(loadNews,600000);
-setInterval(updateTimestamp,1000);
+
+// ── Countdown refresh timers ──
+const _cdTimers={
+  pnl:{el:'cd-pnl',sec:15,left:15,label:'P&L'},
+  trades:{el:'cd-trades',sec:15,left:15,label:'Trades'},
+  recs:{el:'cd-recs',sec:600,left:600,label:'Recommendations'},
+  agents:{el:'cd-agents',sec:30,left:30,label:'Agents'},
+  risk:{el:'cd-risk',sec:30,left:30,label:'Risk'},
+  market:{el:'cd-market',sec:120,left:120,label:'Market'},
+  'live-news':{el:'cd-live-news',sec:300,left:300,label:'Live News'},
+  picks:{el:'cd-picks',sec:600,left:600,label:'Picks'},
+  news:{el:'cd-news',sec:600,left:600,label:'News'},
+};
+function fmtCd(s){if(s<=0)return'now';const m=Math.floor(s/60),r=s%60;return m>0?`${m}m ${r<10?'0':''}${r}s`:`${r}s`}
+function tickCountdowns(){for(const k in _cdTimers){const t=_cdTimers[k];t.left=Math.max(0,t.left-1);const el=document.getElementById(t.el);if(el)el.textContent=`↻ ${fmtCd(t.left)}`;if(t.left<=0)t.left=t.sec}}
+function resetCd(key){if(_cdTimers[key])_cdTimers[key].left=_cdTimers[key].sec}
+
+// Wrap loaders to reset countdown on refresh
+function scheduleWithCd(fn,key,ms){setInterval(()=>{fn();resetCd(key)},ms)}
+scheduleWithCd(loadDashboard,'trades',60000);
+scheduleWithCd(loadMarketStatus,'market',120000);
+scheduleWithCd(loadRecommendations,'recs',600000);
+scheduleWithCd(loadAgentStatus,'agents',30000);
+scheduleWithCd(loadRiskDashboard,'risk',30000);
+scheduleWithCd(loadLiveNews,'live-news',300000);
+scheduleWithCd(loadNews,'news',600000);
+scheduleWithCd(loadPicks,'picks',600000);
+
+// ── Browser title P&L ──
+let _titlePnl=0,_titlePositions=0;
+function updateTitle(){
+  if(_titlePositions>0){
+    const sign=_titlePnl>=0?'+':'-';
+    document.title=`${sign}₹${Math.abs(Math.round(_titlePnl)).toLocaleString('en-IN')} (${_titlePositions}) | Tradease`;
+  } else {
+    document.title='Tradease Dashboard';
+  }
+}
+setInterval(()=>{updateTimestamp();tickCountdowns();updateTitle()},1000);
 
 // ══════════════ ACTIONS ══════════════
 

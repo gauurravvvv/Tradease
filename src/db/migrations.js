@@ -25,7 +25,7 @@ export function runMigrations(db) {
       entry_reason  TEXT,
       exit_reason   TEXT,
       confidence    REAL,
-      entered_at    TEXT    NOT NULL DEFAULT (datetime('now')),
+      entered_at    TEXT    NOT NULL DEFAULT (datetime('now', '+5 hours', '+30 minutes')),
       exited_at     TEXT,
       expiry        TEXT,
       strike        REAL
@@ -39,13 +39,13 @@ export function runMigrations(db) {
       losing_trades  INTEGER NOT NULL DEFAULT 0,
       gross_pnl      REAL    NOT NULL DEFAULT 0,
       notes          TEXT,
-      created_at     TEXT    NOT NULL DEFAULT (datetime('now'))
+      created_at     TEXT    NOT NULL DEFAULT (datetime('now', '+5 hours', '+30 minutes'))
     );
 
     CREATE TABLE IF NOT EXISTS market_cache (
       key       TEXT PRIMARY KEY,
       data      TEXT NOT NULL,
-      cached_at TEXT NOT NULL DEFAULT (datetime('now'))
+      cached_at TEXT NOT NULL DEFAULT (datetime('now', '+5 hours', '+30 minutes'))
     );
 
     CREATE TABLE IF NOT EXISTS agent_signals (
@@ -55,7 +55,7 @@ export function runMigrations(db) {
       signal_type TEXT    NOT NULL,
       confidence  INTEGER DEFAULT 0,
       data        TEXT,
-      created_at  TEXT    NOT NULL DEFAULT (datetime('now')),
+      created_at  TEXT    NOT NULL DEFAULT (datetime('now', '+5 hours', '+30 minutes')),
       consumed    INTEGER NOT NULL DEFAULT 0,
       consumed_by TEXT,
       consumed_at TEXT
@@ -70,7 +70,7 @@ export function runMigrations(db) {
       tokens_in  INTEGER DEFAULT 0,
       tokens_out INTEGER DEFAULT 0,
       skipped    INTEGER DEFAULT 0,
-      created_at TEXT    NOT NULL DEFAULT (datetime('now'))
+      created_at TEXT    NOT NULL DEFAULT (datetime('now', '+5 hours', '+30 minutes'))
     );
   `);
 

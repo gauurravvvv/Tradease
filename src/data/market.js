@@ -44,7 +44,7 @@ function ySymbol(symbol) {
  */
 export async function getQuote(symbol) {
   const cKey = `quote:${symbol}`;
-  const cached = cacheGet(cKey);
+  const cached = cacheGet(cKey, 1); // 1 minute cache for live quotes
   if (cached) return cached;
 
   const ys = ySymbol(symbol);
@@ -126,10 +126,15 @@ export async function getIntradayData(symbol, interval = '15m', range = '5d') {
   const cached = cacheGet(cKey, ttl);
   if (cached) return cached;
 
+  // Convert range to period1 (yahoo-finance2 v3.14+ requires period1 instead of range)
+  const rangeDays = { '1d': 1, '5d': 5, '1mo': 30, '3mo': 90 };
+  const days = rangeDays[range] || 5;
+  const period1 = new Date(Date.now() - days * 86400000);
+
   const ys = ySymbol(symbol);
   const result = await yahooFinance.chart(ys, {
     interval,
-    range,
+    period1,
   });
 
   const bars = (result.quotes || []).map(q => ({

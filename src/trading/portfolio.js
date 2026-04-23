@@ -43,12 +43,21 @@ export function getPortfolioSummary() {
   const capitalInUse = openTrades.reduce((sum, t) => sum + t.capital_used, 0);
   const unrealized = openTrades.reduce((sum, t) => sum + unrealisedPnl(t), 0);
 
+  // Total realized P&L from all closed trades
+  const closedRow = db.prepare(
+    "SELECT COALESCE(SUM(pnl), 0) AS total FROM trades WHERE status IN ('CLOSED', 'STOPPED')"
+  ).get();
+  const realizedPnl = closedRow.total;
+  const netWorth = Math.round((TRADING.VIRTUAL_CAPITAL + realizedPnl + unrealized) * 100) / 100;
+
   return {
     totalCapital: TRADING.VIRTUAL_CAPITAL,
     capitalInUse,
     availableCapital: TRADING.VIRTUAL_CAPITAL - capitalInUse,
     openPositions: openTrades.length,
     unrealizedPnl: Math.round(unrealized * 100) / 100,
+    realizedPnl: Math.round(realizedPnl * 100) / 100,
+    netWorth,
     trades: openTrades,
   };
 }
@@ -109,7 +118,7 @@ export function getPerformanceStats(days = 30) {
     .prepare(
       `SELECT * FROM trades
        WHERE status IN ('CLOSED', 'STOPPED')
-         AND exited_at >= datetime('now', '-' || @days || ' days')
+         AND exited_at >= datetime('now', '+5 hours', '+30 minutes', '-' || @days || ' days')
        ORDER BY exited_at DESC`
     )
     .all({ days });
