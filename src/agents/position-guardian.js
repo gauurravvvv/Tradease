@@ -1,18 +1,29 @@
 import { BaseAgent } from './base.js';
-import { getOpenTrades, exitTrade, partialExit, stopTrade, updateTradePrice } from '../trading/manager.js';
+import {
+  getOpenTrades,
+  exitTrade,
+  partialExit,
+  stopTrade,
+  updateTradePrice,
+} from '../trading/manager.js';
 import { shouldExit, calculateTrailingStop } from '../trading/risk.js';
 import { checkIndexHealth } from '../listeners/index-monitor.js';
 import { getQuote } from '../data/market.js';
 import { computeATR } from '../analysis/technicals.js';
 import { RSI, MACD } from 'technicalindicators';
 import { getHistorical } from '../data/market.js';
-import { notifyTradeExit, notifyStopLoss, notifyTargetHit, notifyIndexCrash } from '../utils/notify.js';
+import {
+  notifyTradeExit,
+  notifyStopLoss,
+  notifyTargetHit,
+  notifyIndexCrash,
+} from '../utils/notify.js';
 import { logger } from '../utils/logger.js';
 import { TRADING } from '../config/settings.js';
 
 const WIND_DOWN_MINUTE = 15 * 60 + 15; // 15:15 IST = 925 min
 const INDEX_CHECK_INTERVAL = 10 * 60 * 1000; // 10 min in ms
-const SL_PROXIMITY_PCT = 0.30; // within 30% of risk distance = "near SL"
+const SL_PROXIMITY_PCT = 0.3; // within 30% of risk distance = "near SL"
 
 export class PositionGuardian extends BaseAgent {
   constructor() {
@@ -62,7 +73,9 @@ export class PositionGuardian extends BaseAgent {
       try {
         await this._manageTrade(trade, signalsBySymbol[trade.symbol] || []);
       } catch (err) {
-        logger.error(`[position-guardian] Error managing ${trade.symbol}: ${err.message}`);
+        logger.error(
+          `[position-guardian] Error managing ${trade.symbol}: ${err.message}`,
+        );
         this.log('error', trade.symbol, err.message);
       }
     }
@@ -87,7 +100,14 @@ export class PositionGuardian extends BaseAgent {
     if (hist && hist.length >= 26) {
       const closes = hist.map(d => d.close);
       const rsiValues = RSI.calculate({ values: closes, period: 14 });
-      const macdValues = MACD.calculate({ values: closes, fastPeriod: 12, slowPeriod: 26, signalPeriod: 9, SimpleMAOscillator: false, SimpleMASignal: false });
+      const macdValues = MACD.calculate({
+        values: closes,
+        fastPeriod: 12,
+        slowPeriod: 26,
+        signalPeriod: 9,
+        SimpleMAOscillator: false,
+        SimpleMASignal: false,
+      });
       if (rsiValues.length > 0 && macdValues.length >= 2) {
         momentum = {
           rsi: rsiValues[rsiValues.length - 1],
@@ -121,7 +141,13 @@ export class PositionGuardian extends BaseAgent {
           partialExit(trade.id, 0.5, price, 'T1 hit');
           notifyTargetHit(trade.symbol, 1, price);
           // Trail SL to breakeven (entry price)
-          const newTrail = calculateTrailingStop(trade.entry_price, price, atr, trade.type, momentum);
+          const newTrail = calculateTrailingStop(
+            trade.entry_price,
+            price,
+            atr,
+            trade.type,
+            momentum,
+          );
           updateTradePrice(trade.id, price); // refresh
           this.log('t1_hit', trade.symbol, `T1=${price}, SL→breakeven`);
         }
@@ -141,12 +167,22 @@ export class PositionGuardian extends BaseAgent {
       default: {
         // Update trailing stop if applicable
         if (trade.t1_hit) {
-          const trail = calculateTrailingStop(trade.entry_price, price, atr, trade.type, momentum);
+          const trail = calculateTrailingStop(
+            trade.entry_price,
+            price,
+            atr,
+            trade.type,
+            momentum,
+          );
           if (trail && this._trailingStopHit(trade, price, trail)) {
             const pnl = this._calcPnl(trade, price);
             exitTrade(trade.id, price, 'trailing stop hit');
             notifyTradeExit(trade.symbol, trade.type, price, pnl);
-            this.log('trailing_exit', trade.symbol, `trail=${trail} price=${price}`);
+            this.log(
+              'trailing_exit',
+              trade.symbol,
+              `trail=${trail} price=${price}`,
+            );
             this._consumeSymbolSignals(signals);
             return;
           }
@@ -170,7 +206,13 @@ export class PositionGuardian extends BaseAgent {
 
     // Urgent exit on a profitable position = ambiguous → ask Claude
     if (urgentSignals.length && profitable) {
-      await this._askClaudeForDecision(trade, price, atr, 'urgent_exit_profitable', urgentSignals);
+      await this._askClaudeForDecision(
+        trade,
+        price,
+        atr,
+        'urgent_exit_profitable',
+        urgentSignals,
+      );
       return;
     }
 
@@ -185,8 +227,17 @@ export class PositionGuardian extends BaseAgent {
     }
 
     // Near SL with recovery → ask Claude
-    if (this._isNearSL(trade, price, atr) && this._showingRecovery(trade, price)) {
-      await this._askClaudeForDecision(trade, price, atr, 'near_sl_recovery', signals);
+    if (
+      this._isNearSL(trade, price, atr) &&
+      this._showingRecovery(trade, price)
+    ) {
+      await this._askClaudeForDecision(
+        trade,
+        price,
+        atr,
+        'near_sl_recovery',
+        signals,
+      );
     }
   }
 
@@ -211,7 +262,8 @@ export class PositionGuardian extends BaseAgent {
         atr,
       },
       signals: signals.map(s => ({ type: s.signal_type, data: s.data })),
-      question: 'HOLD or EXIT? Respond JSON: {"action":"HOLD"|"EXIT","reason":"<brief>"}'
+      question:
+        'HOLD or EXIT? Respond JSON: {"action":"HOLD"|"EXIT","reason":"<brief>"}',
     });
 
     try {
@@ -229,7 +281,9 @@ export class PositionGuardian extends BaseAgent {
       this._consumeSymbolSignals(signals);
     } catch (err) {
       // Claude failure = default to HOLD (conservative)
-      logger.warn(`[position-guardian] Claude decision failed for ${trade.symbol}: ${err.message}`);
+      logger.warn(
+        `[position-guardian] Claude decision failed for ${trade.symbol}: ${err.message}`,
+      );
       this.log('claude_error', trade.symbol, err.message);
     }
   }
@@ -241,8 +295,15 @@ export class PositionGuardian extends BaseAgent {
       const health = await checkIndexHealth();
       if (health.severity === 'crash') {
         notifyIndexCrash('NIFTY', health.niftyChange);
-        this.log('index_crash', null, `nifty=${health.niftyPrice} change=${health.niftyChange}%`);
-        await this._exitAll(trades, `index crash: NIFTY ${health.niftyChange}%`);
+        this.log(
+          'index_crash',
+          null,
+          `nifty=${health.niftyPrice} change=${health.niftyChange}%`,
+        );
+        await this._exitAll(
+          trades,
+          `index crash: NIFTY ${health.niftyChange}%`,
+        );
         return true;
       }
     } catch (err) {
@@ -263,7 +324,9 @@ export class PositionGuardian extends BaseAgent {
         notifyTradeExit(trade.symbol, trade.type, price, pnl);
         this.log('exit_all', trade.symbol, reason);
       } catch (err) {
-        logger.error(`[position-guardian] Failed to exit ${trade.symbol}: ${err.message}`);
+        logger.error(
+          `[position-guardian] Failed to exit ${trade.symbol}: ${err.message}`,
+        );
         this.log('error', trade.symbol, `exit_all failed: ${err.message}`);
       }
     }

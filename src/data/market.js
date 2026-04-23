@@ -1,7 +1,26 @@
 import YahooFinance from 'yahoo-finance2';
 import { DATA } from '../config/settings.js';
+import { logger } from '../utils/logger.js';
 
 const yahooFinance = new YahooFinance({ suppressNotices: ['yahooSurvey'] });
+
+// ---------------------------------------------------------------------------
+// Retry helper — exponential backoff for transient network failures
+// ---------------------------------------------------------------------------
+async function withRetry(fn, { retries = 2, delayMs = 1000, label = '' } = {}) {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      const isLast = attempt === retries;
+      const isTransient = /fetch failed|ENOTFOUND|ETIMEDOUT|ECONNRESET|ECONNREFUSED|socket hang up|network/i.test(err.message);
+      if (isLast || !isTransient) throw err;
+      const wait = delayMs * Math.pow(2, attempt);
+      logger.debug(`[market] Retry ${attempt + 1}/${retries} for ${label} in ${wait}ms: ${err.message}`);
+      await new Promise(r => setTimeout(r, wait));
+    }
+  }
+}
 
 // ---------------------------------------------------------------------------
 // In-memory cache
@@ -22,6 +41,13 @@ function cacheGet(key, ttlMinutes) {
 
 function cacheSet(key, data) {
   cache.set(key, { data, ts: Date.now() });
+}
+
+/**
+ * Flush all cached data — useful after system sleep/wake to avoid stale prices.
+ */
+export function clearMarketCache() {
+  cache.clear();
 }
 
 // ---------------------------------------------------------------------------
@@ -48,7 +74,7 @@ export async function getQuote(symbol) {
   if (cached) return cached;
 
   const ys = ySymbol(symbol);
-  const result = await yahooFinance.quote(ys);
+  const result = await withRetry(() => yahooFinance.quote(ys), { label: `quote:${symbol}` });
 
   if (!result || result.regularMarketPrice == null) {
     throw new Error(`No data for ${symbol} (Yahoo symbol: ${ys})`);
@@ -94,11 +120,11 @@ export async function getHistorical(symbol, days = 90) {
   const start = new Date();
   start.setDate(end.getDate() - days);
 
-  const result = await yahooFinance.chart(ys, {
+  const result = await withRetry(() => yahooFinance.chart(ys, {
     period1: start,
     period2: end,
     interval: '1d',
-  });
+  }), { label: `hist:${symbol}` });
 
   const bars = (result.quotes || []).map(q => ({
     date:   q.date,
@@ -132,10 +158,10 @@ export async function getIntradayData(symbol, interval = '15m', range = '5d') {
   const period1 = new Date(Date.now() - days * 86400000);
 
   const ys = ySymbol(symbol);
-  const result = await yahooFinance.chart(ys, {
+  const result = await withRetry(() => yahooFinance.chart(ys, {
     interval,
     period1,
-  });
+  }), { label: `intra:${symbol}` });
 
   const bars = (result.quotes || []).map(q => ({
     date:   q.date,

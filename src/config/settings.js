@@ -8,7 +8,7 @@ const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
 export const TRADING = {
   VIRTUAL_CAPITAL: 200000,
   MAX_POSITIONS: 3,
-  MAX_CAPITAL_PER_POSITION: 0.20,
+  MAX_CAPITAL_PER_POSITION: 0.2,
   MAX_LOSS_PER_TRADE: 0.05,
   MIN_CONFIDENCE: 70,
   MIN_VOLUME: 1000000,
@@ -16,7 +16,7 @@ export const TRADING = {
   TRAILING_STOP_ATR: 0.5,
   TRAILING_TRIGGER_PCT: 1.0,
   PROFIT_BOOKING: {
-    T1: 0.50,
+    T1: 0.5,
     T2: 0.25,
     RUNNER: 0.25,
   },
@@ -37,13 +37,13 @@ export const TRADING = {
 
 // Cron expressions — all Mon-Fri only (day-of-week field: 1-5)
 export const SCHEDULE = {
-  PRE_MARKET_SCAN:   '30 8 * * 1-5',
+  PRE_MARKET_SCAN: '30 8 * * 1-5',
   MARKET_OPEN_CHECK: '15 9 * * 1-5',
-  TRADE_EXECUTION:   '30 9 * * 1-5',
-  MARKET_PULSE:      '*/30 9-14 * * 1-5',
-  POSITION_MONITOR:  '* 9-14 * * 1-5',
-  WIND_DOWN:         '15 15 * * 1-5',
-  POST_MARKET:       '45 15 * * 1-5',
+  TRADE_EXECUTION: '30 9 * * 1-5',
+  MARKET_PULSE: '*/30 9-14 * * 1-5',
+  POSITION_MONITOR: '* 9-14 * * 1-5',
+  WIND_DOWN: '15 15 * * 1-5',
+  POST_MARKET: '45 15 * * 1-5',
 };
 
 export const DATA = {

@@ -55,65 +55,69 @@ export async function sendTelegram(text) {
 export function telegramTradeEntry(symbol, type, price, confidence) {
   sendTelegram(
     `🟢 <b>ENTRY: ${type} ${symbol}</b>\n` +
-    `💰 Price: ₹${price}\n` +
-    `📊 Confidence: ${confidence}%\n` +
-    `⏰ ${new Date().toLocaleTimeString('en-IN')}`
+      `💰 Price: ₹${price}\n` +
+      `📊 Confidence: ${confidence}%\n` +
+      `⏰ ${new Date().toLocaleTimeString('en-IN')}`,
   );
 }
 
 export function telegramTradeExit(symbol, type, price, pnl) {
   const emoji = pnl >= 0 ? '🟢' : '🔴';
-  const pnlStr = pnl >= 0 ? `+₹${Math.abs(pnl).toFixed(0)}` : `-₹${Math.abs(pnl).toFixed(0)}`;
+  const pnlStr =
+    pnl >= 0
+      ? `+₹${Math.abs(pnl).toFixed(0)}`
+      : `-₹${Math.abs(pnl).toFixed(0)}`;
   sendTelegram(
     `${emoji} <b>EXIT: ${type} ${symbol}</b>\n` +
-    `💰 Price: ₹${price}\n` +
-    `📈 P&L: <b>${pnlStr}</b>\n` +
-    `⏰ ${new Date().toLocaleTimeString('en-IN')}`
+      `💰 Price: ₹${price}\n` +
+      `📈 P&L: <b>${pnlStr}</b>\n` +
+      `⏰ ${new Date().toLocaleTimeString('en-IN')}`,
   );
 }
 
 export function telegramStopLoss(symbol, price) {
   sendTelegram(
     `🛑 <b>STOP-LOSS: ${symbol}</b>\n` +
-    `💰 Stopped at ₹${price}\n` +
-    `⏰ ${new Date().toLocaleTimeString('en-IN')}`
+      `💰 Stopped at ₹${price}\n` +
+      `⏰ ${new Date().toLocaleTimeString('en-IN')}`,
   );
 }
 
 export function telegramTargetHit(symbol, targetNum, price) {
   sendTelegram(
     `🎯 <b>TARGET ${targetNum} HIT: ${symbol}</b>\n` +
-    `💰 Price: ₹${price}\n` +
-    `⏰ ${new Date().toLocaleTimeString('en-IN')}`
+      `💰 Price: ₹${price}\n` +
+      `⏰ ${new Date().toLocaleTimeString('en-IN')}`,
   );
 }
 
 export function telegramDailySummary(pnl, winRate, trades, capital) {
   const emoji = pnl >= 0 ? '📈' : '📉';
-  const pnlStr = pnl >= 0 ? `+₹${pnl.toFixed(0)}` : `-₹${Math.abs(pnl).toFixed(0)}`;
+  const pnlStr =
+    pnl >= 0 ? `+₹${pnl.toFixed(0)}` : `-₹${Math.abs(pnl).toFixed(0)}`;
   sendTelegram(
     `${emoji} <b>DAILY SUMMARY</b>\n` +
-    `💰 P&L: <b>${pnlStr}</b>\n` +
-    `🎯 Win Rate: ${winRate}%\n` +
-    `📊 Trades: ${trades}\n` +
-    `🏦 Capital: ₹${capital?.toLocaleString('en-IN') || '--'}\n` +
-    `📅 ${new Date().toLocaleDateString('en-IN')}`
+      `💰 P&L: <b>${pnlStr}</b>\n` +
+      `🎯 Win Rate: ${winRate}%\n` +
+      `📊 Trades: ${trades}\n` +
+      `🏦 Capital: ₹${capital?.toLocaleString('en-IN') || '--'}\n` +
+      `📅 ${new Date().toLocaleDateString('en-IN')}`,
   );
 }
 
 export function telegramIndexCrash(indexName, changePct) {
   sendTelegram(
     `🚨🚨 <b>INDEX CRASH: ${indexName} ${changePct.toFixed(1)}%</b>\n` +
-    `⚠️ Exiting all positions!\n` +
-    `⏰ ${new Date().toLocaleTimeString('en-IN')}`
+      `⚠️ Exiting all positions!\n` +
+      `⏰ ${new Date().toLocaleTimeString('en-IN')}`,
   );
 }
 
 export function telegramDaemonStart() {
   sendTelegram(
     `🤖 <b>Tradease Daemon Started</b>\n` +
-    `✅ All agents active\n` +
-    `⏰ ${new Date().toLocaleTimeString('en-IN')}`
+      `✅ All agents active\n` +
+      `⏰ ${new Date().toLocaleTimeString('en-IN')}`,
   );
 }
 

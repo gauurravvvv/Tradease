@@ -16,7 +16,14 @@ export async function screenStocks() {
   const symbols = FNO_STOCKS.map(s => s.symbol);
 
   // Parallel fetch: quotes, historical, news, sectors, FII/DII, global cues
-  const [quotesArr, historicalMap, newsItems, sectorData, fiiDiiData, globalCues] = await Promise.all([
+  const [
+    quotesArr,
+    historicalMap,
+    newsItems,
+    sectorData,
+    fiiDiiData,
+    globalCues,
+  ] = await Promise.all([
     getMultipleQuotes(symbols),
     getBatchHistorical(symbols, 90),
     fetchAllNews(),
@@ -35,9 +42,17 @@ export async function screenStocks() {
 
   // Map stock sectors to index names
   const SECTOR_ALIAS = {
-    Banking: 'Bank', Finance: 'Financial Services', IT: 'IT',
-    Energy: 'Energy', Auto: 'Auto', Metals: 'Metal', Pharma: 'Pharma',
-    FMCG: 'FMCG', Infra: 'Infrastructure', Telecom: 'IT', Cement: 'Infrastructure',
+    Banking: 'Bank',
+    Finance: 'Financial Services',
+    IT: 'IT',
+    Energy: 'Energy',
+    Auto: 'Auto',
+    Metals: 'Metal',
+    Pharma: 'Pharma',
+    FMCG: 'FMCG',
+    Infra: 'Infrastructure',
+    Telecom: 'IT',
+    Cement: 'Infrastructure',
     Realty: 'Realty',
   };
 
@@ -60,8 +75,20 @@ export async function screenStocks() {
     const sectorKey = SECTOR_ALIAS[stock.sector] || stock.sector;
     const sectorInfo = sectorMap[sectorKey] || null;
 
-    const totalScore = computeScreenerScore(quote, technicals, newsCount, sectorInfo, fiiDiiData, globalCues);
-    const recommendation = deriveRecommendation(technicals, sectorInfo, fiiDiiData, globalCues);
+    const totalScore = computeScreenerScore(
+      quote,
+      technicals,
+      newsCount,
+      sectorInfo,
+      fiiDiiData,
+      globalCues,
+    );
+    const recommendation = deriveRecommendation(
+      technicals,
+      sectorInfo,
+      fiiDiiData,
+      globalCues,
+    );
 
     scored.push({
       symbol: stock.symbol,
@@ -78,8 +105,11 @@ export async function screenStocks() {
       volume: quote.volume,
       technicals,
       fundamentals: {
-        pe: quote.pe, eps: quote.eps, marketCap: quote.marketCap,
-        fiftyTwoWeekHigh: quote.fiftyTwoWeekHigh, fiftyTwoWeekLow: quote.fiftyTwoWeekLow,
+        pe: quote.pe,
+        eps: quote.eps,
+        marketCap: quote.marketCap,
+        fiftyTwoWeekHigh: quote.fiftyTwoWeekHigh,
+        fiftyTwoWeekLow: quote.fiftyTwoWeekLow,
       },
       news: newsCount,
       score: totalScore,
@@ -105,7 +135,10 @@ export async function screenStocks() {
           stock.confluence = conf.score;
           stock.confluenceBreakdown = conf.breakdown;
           // Add confluence weight (10% of total)
-          stock.score = Math.round(Math.min(100, stock.score * 0.9 + conf.score * 0.1) * 100) / 100;
+          stock.score =
+            Math.round(
+              Math.min(100, stock.score * 0.9 + conf.score * 0.1) * 100,
+            ) / 100;
         }
       }
     }
@@ -145,15 +178,18 @@ export async function quickScreen() {
 
     // Quick score: weight absolute price movement + volume
     const changeScore = Math.min(absChange * 10, 40); // Max 40 from change
-    const volumeScore = quote.volume > 5000000 ? 30
-      : quote.volume > 2000000 ? 20
-      : quote.volume > 1000000 ? 10
-      : 5;
+    const volumeScore =
+      quote.volume > 5000000
+        ? 30
+        : quote.volume > 2000000
+          ? 20
+          : quote.volume > 1000000
+            ? 10
+            : 5;
 
     const quickScore = Math.round(changeScore + volumeScore);
-    const recommendation = quote.change > 1 ? 'CALL'
-      : quote.change < -1 ? 'PUT'
-      : 'NEUTRAL';
+    const recommendation =
+      quote.change > 1 ? 'CALL' : quote.change < -1 ? 'PUT' : 'NEUTRAL';
 
     results.push({
       symbol: stock.symbol,
@@ -191,7 +227,11 @@ function buildNewsMentionMap(newsItems, stocks) {
     const nameLower = stock.name.toLowerCase();
 
     for (const news of newsItems) {
-      const text = ((news.title || '') + ' ' + (news.content || '')).toLowerCase();
+      const text = (
+        (news.title || '') +
+        ' ' +
+        (news.content || '')
+      ).toLowerCase();
       if (text.includes(sym.toLowerCase()) || text.includes(nameLower)) {
         count++;
       }
@@ -216,7 +256,14 @@ function buildNewsMentionMap(newsItems, stocks) {
  *   globalScore     8%  (global market sentiment)
  *   volatilityScore 6%  (VIX-based risk appetite)
  */
-function computeScreenerScore(quote, technicals, newsCount, sectorInfo, fiiDiiData, globalCues) {
+function computeScreenerScore(
+  quote,
+  technicals,
+  newsCount,
+  sectorInfo,
+  fiiDiiData,
+  globalCues,
+) {
   // Volume surge (12%)
   const volRatio = technicals.volume.ratio || 0;
   const volumeSurge = Math.min(volRatio / 3, 1) * 12;
@@ -243,7 +290,7 @@ function computeScreenerScore(quote, technicals, newsCount, sectorInfo, fiiDiiDa
 
     if (supports.length > 0) {
       const nearestSupport = supports.reduce((best, s) =>
-        Math.abs(s - price) < Math.abs(best - price) ? s : best
+        Math.abs(s - price) < Math.abs(best - price) ? s : best,
       );
       const supportDist = Math.abs(price - nearestSupport) / price;
       if (supportDist < 0.03) proximityScore += 5;
@@ -252,7 +299,7 @@ function computeScreenerScore(quote, technicals, newsCount, sectorInfo, fiiDiiDa
 
     if (resistances.length > 0) {
       const nearestResistance = resistances.reduce((best, r) =>
-        Math.abs(r - price) < Math.abs(best - price) ? r : best
+        Math.abs(r - price) < Math.abs(best - price) ? r : best,
       );
       const resistanceDist = Math.abs(price - nearestResistance) / price;
       if (resistanceDist < 0.03) proximityScore += 5;
@@ -301,13 +348,23 @@ function computeScreenerScore(quote, technicals, newsCount, sectorInfo, fiiDiiDa
     const vixPrice = globalCues.volatility.vix.price || 0;
     // VIX 15-25 = sweet spot (enough movement, not panic)
     if (vixPrice >= 15 && vixPrice <= 25) volatilityScore = 6;
-    else if (vixPrice > 25 && vixPrice <= 35) volatilityScore = 4; // elevated but tradeable
-    else if (vixPrice > 35) volatilityScore = 2; // panic — reduce score
+    else if (vixPrice > 25 && vixPrice <= 35)
+      volatilityScore = 4; // elevated but tradeable
+    else if (vixPrice > 35)
+      volatilityScore = 2; // panic — reduce score
     else volatilityScore = 3; // low VIX, less opportunity
   }
 
-  const total = volumeSurge + technicalScore + momentumScore + proximityScore +
-    newsScore + sectorScore + fiiDiiScore + globalScore + volatilityScore;
+  const total =
+    volumeSurge +
+    technicalScore +
+    momentumScore +
+    proximityScore +
+    newsScore +
+    sectorScore +
+    fiiDiiScore +
+    globalScore +
+    volatilityScore;
   return Math.round(Math.min(total, 100) * 100) / 100;
 }
 

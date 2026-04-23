@@ -1,7 +1,10 @@
 import { createHash } from 'crypto';
 import { BaseAgent } from './base.js';
 import { fetchAllNews, getStockNews } from '../data/news.js';
-import { scoreSentiment, classifySentiment } from '../listeners/news-monitor.js';
+import {
+  scoreSentiment,
+  classifySentiment,
+} from '../listeners/news-monitor.js';
 import { getOpenTrades } from '../trading/manager.js';
 import { logger } from '../utils/logger.js';
 
@@ -43,7 +46,9 @@ export class NewsSentinel extends BaseAgent {
 
     const openTrades = getOpenTrades();
     const positionSymbols = [...new Set(openTrades.map(t => t.symbol))];
-    const watchlistSymbols = [...this._watchlist].filter(s => !positionSymbols.includes(s));
+    const watchlistSymbols = [...this._watchlist].filter(
+      s => !positionSymbols.includes(s),
+    );
 
     // Priority: positions first, then watchlist
     const allSymbols = [...positionSymbols, ...watchlistSymbols];
@@ -57,7 +62,7 @@ export class NewsSentinel extends BaseAgent {
     const symbolArticles = new Map();
 
     // Fetch position stocks individually for accuracy
-    const positionFetches = positionSymbols.map(async (sym) => {
+    const positionFetches = positionSymbols.map(async sym => {
       try {
         const articles = await getStockNews(sym);
         symbolArticles.set(sym, articles);
@@ -119,17 +124,35 @@ export class NewsSentinel extends BaseAgent {
         claudeCalls++;
         const resolution = await this._resolveConflict(symbol, scored);
         if (resolution) {
-          this._writeFromResolution(symbol, resolution, scored, isPosition.has(symbol));
+          this._writeFromResolution(
+            symbol,
+            resolution,
+            scored,
+            isPosition.has(symbol),
+          );
           signalsWritten++;
         }
         continue;
       }
 
       // Rule-based signal emission
-      signalsWritten += this._emitRuleSignals(symbol, totalScore, sentiment, scored, isPosition.has(symbol));
+      signalsWritten += this._emitRuleSignals(
+        symbol,
+        totalScore,
+        sentiment,
+        scored,
+        isPosition.has(symbol),
+      );
     }
 
-    this.log('tick', null, `symbols:${allSymbols.length} articles:${totalProcessed} skipped:${totalSkipped} signals:${signalsWritten} claude:${claudeCalls}`, 0, 0, totalSkipped);
+    this.log(
+      'tick',
+      null,
+      `symbols:${allSymbols.length} articles:${totalProcessed} skipped:${totalSkipped} signals:${signalsWritten} claude:${claudeCalls}`,
+      0,
+      0,
+      totalSkipped,
+    );
   }
 
   // ── Deduplication ──
@@ -180,12 +203,17 @@ export class NewsSentinel extends BaseAgent {
         .sort((a, b) => a.score - b.score)
         .slice(0, 3);
 
-      this.writeSignal(symbol, 'urgent_exit', Math.min(Math.abs(totalScore) / 6, 1), {
-        sentiment,
-        totalScore,
-        headlines: topBearish.map(a => a.title),
-        articleCount: scored.length,
-      });
+      this.writeSignal(
+        symbol,
+        'urgent_exit',
+        Math.min(Math.abs(totalScore) / 6, 1),
+        {
+          sentiment,
+          totalScore,
+          headlines: topBearish.map(a => a.title),
+          articleCount: scored.length,
+        },
+      );
       count++;
     }
 
@@ -194,7 +222,10 @@ export class NewsSentinel extends BaseAgent {
       this.writeSignal(symbol, 'bullish_news', Math.min(totalScore / 6, 1), {
         sentiment,
         totalScore,
-        headlines: scored.filter(a => a.score > 0).map(a => a.title).slice(0, 5),
+        headlines: scored
+          .filter(a => a.score > 0)
+          .map(a => a.title)
+          .slice(0, 5),
         articleCount: scored.length,
       });
       count++;
@@ -202,12 +233,20 @@ export class NewsSentinel extends BaseAgent {
 
     // Bearish signal
     if (totalScore <= -3) {
-      this.writeSignal(symbol, 'bearish_news', Math.min(Math.abs(totalScore) / 6, 1), {
-        sentiment,
-        totalScore,
-        headlines: scored.filter(a => a.score < 0).map(a => a.title).slice(0, 5),
-        articleCount: scored.length,
-      });
+      this.writeSignal(
+        symbol,
+        'bearish_news',
+        Math.min(Math.abs(totalScore) / 6, 1),
+        {
+          sentiment,
+          totalScore,
+          headlines: scored
+            .filter(a => a.score < 0)
+            .map(a => a.title)
+            .slice(0, 5),
+          articleCount: scored.length,
+        },
+      );
       count++;
     }
 
@@ -233,7 +272,9 @@ Which direction dominates? Reply JSON only:
       const raw = await this.callClaude(prompt);
       return this.parseJson(raw);
     } catch (err) {
-      logger.error(`[news-sentinel] Claude conflict resolution failed for ${symbol}: ${err.message}`);
+      logger.error(
+        `[news-sentinel] Claude conflict resolution failed for ${symbol}: ${err.message}`,
+      );
       this.log('claude_error', symbol, err.message);
       return null;
     }

@@ -41,13 +41,16 @@ export async function runBacktest(config) {
   } = config;
 
   const strategy = getStrategy(strategyName);
-  logger.info(`[backtest] Starting ${strategyName} backtest: ${symbols.length} symbols, ${startDate} to ${endDate}`);
+  logger.info(
+    `[backtest] Starting ${strategyName} backtest: ${symbols.length} symbols, ${startDate} to ${endDate}`,
+  );
 
   // Fetch all historical data
   const allData = {};
   for (const symbol of symbols) {
     try {
-      const days = Math.ceil((new Date(endDate) - new Date(startDate)) / 86400000) + 90; // extra for indicator warmup
+      const days =
+        Math.ceil((new Date(endDate) - new Date(startDate)) / 86400000) + 90; // extra for indicator warmup
       const data = await getHistorical(symbol, days);
       if (data && data.length >= 30) {
         allData[symbol] = data;
@@ -129,7 +132,11 @@ export async function runBacktest(config) {
 
         const entryPrice = bars[symbol].close;
         const sl = calculateStopLoss(entryPrice, atr, signal.type);
-        const { target1, target2 } = calculateTargets(entryPrice, sl, signal.type);
+        const { target1, target2 } = calculateTargets(
+          entryPrice,
+          sl,
+          signal.type,
+        );
 
         const maxCap = capital * maxCapitalPerPosition;
         const lotSize = 1; // Simplified for backtesting
@@ -271,12 +278,14 @@ function checkExit(pos, bar, stopMultiplier, trailingATR) {
     const risk = Math.abs(pos.entryPrice - pos.target1) / 2; // simple ATR proxy
     let newTrail;
     if (pos.type === 'CALL') {
-      newTrail = Math.round((pos.highWaterMark - risk * trailingATR) * 100) / 100;
+      newTrail =
+        Math.round((pos.highWaterMark - risk * trailingATR) * 100) / 100;
       if (!pos.trailingStop || newTrail > pos.trailingStop) {
         return { exit: false, updateTrail: true, trailingStop: newTrail };
       }
     } else {
-      newTrail = Math.round((pos.highWaterMark + risk * trailingATR) * 100) / 100;
+      newTrail =
+        Math.round((pos.highWaterMark + risk * trailingATR) * 100) / 100;
       if (!pos.trailingStop || newTrail < pos.trailingStop) {
         return { exit: false, updateTrail: true, trailingStop: newTrail };
       }
@@ -288,5 +297,8 @@ function checkExit(pos, bar, stopMultiplier, trailingATR) {
 
 function computePnl(pos) {
   const dir = pos.type === 'CALL' ? 1 : -1;
-  return Math.round(dir * (pos.exitPrice - pos.entryPrice) * pos.quantity * 100) / 100;
+  return (
+    Math.round(dir * (pos.exitPrice - pos.entryPrice) * pos.quantity * 100) /
+    100
+  );
 }

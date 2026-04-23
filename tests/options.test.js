@@ -1,5 +1,9 @@
 import { jest } from '@jest/globals';
-import { estimatePremium, getNearestExpiry, getATMStrike } from '../src/data/options.js';
+import {
+  estimatePremium,
+  getNearestExpiry,
+  getATMStrike,
+} from '../src/data/options.js';
 
 describe('estimatePremium', () => {
   test('CALL premium is positive for ATM', () => {
@@ -26,12 +30,12 @@ describe('estimatePremium', () => {
 
   test('higher IV = higher premium', () => {
     const lowIV = estimatePremium(100, 100, 'CALL', 7, 0.15);
-    const highIV = estimatePremium(100, 100, 'CALL', 7, 0.40);
+    const highIV = estimatePremium(100, 100, 'CALL', 7, 0.4);
     expect(highIV).toBeGreaterThan(lowIV);
   });
 
   test('premium never negative', () => {
-    const premium = estimatePremium(100, 200, 'CALL', 1, 0.10);
+    const premium = estimatePremium(100, 200, 'CALL', 1, 0.1);
     expect(premium).toBeGreaterThanOrEqual(0);
   });
 });
@@ -53,7 +57,9 @@ describe('getNearestExpiry', () => {
     const weeklyDate = new Date(expiry.weekly);
     const now = new Date();
     // Weekly should be today or in the future
-    expect(weeklyDate.getTime()).toBeGreaterThanOrEqual(now.getTime() - 86400000);
+    expect(weeklyDate.getTime()).toBeGreaterThanOrEqual(
+      now.getTime() - 86400000,
+    );
   });
 
   test('weeklyDate is a Thursday', () => {

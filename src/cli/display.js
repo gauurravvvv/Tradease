@@ -116,9 +116,16 @@ export function displaySentimentBar(score) {
   const bar = '\u2588'.repeat(filled) + '\u2591'.repeat(empty);
 
   let label, colorFn;
-  if (s >= 25) { label = 'BULLISH'; colorFn = chalk.green; }
-  else if (s <= -25) { label = 'BEARISH'; colorFn = chalk.red; }
-  else { label = 'MIXED'; colorFn = chalk.yellow; }
+  if (s >= 25) {
+    label = 'BULLISH';
+    colorFn = chalk.green;
+  } else if (s <= -25) {
+    label = 'BEARISH';
+    colorFn = chalk.red;
+  } else {
+    label = 'MIXED';
+    colorFn = chalk.yellow;
+  }
 
   return colorFn(bar) + ' ' + colorFn.bold(label);
 }
@@ -139,25 +146,41 @@ export function displayGlobalCuesBar(cues) {
   // US + Asia line
   const parts1 = [];
   if (cues.us?.sp500) parts1.push(`S&P ${signedPct(cues.us.sp500.changePct)}`);
-  if (cues.us?.nasdaq) parts1.push(`Nasdaq ${signedPct(cues.us.nasdaq.changePct)}`);
-  if (cues.asia?.nikkei) parts1.push(`Nikkei ${signedPct(cues.asia.nikkei.changePct)}`);
+  if (cues.us?.nasdaq)
+    parts1.push(`Nasdaq ${signedPct(cues.us.nasdaq.changePct)}`);
+  if (cues.asia?.nikkei)
+    parts1.push(`Nikkei ${signedPct(cues.asia.nikkei.changePct)}`);
   if (parts1.length > 0) {
-    lines.push(chalk.white('  GLOBAL: ') + parts1.map(p => colorByPct(p, extractPct(p))).join(chalk.gray(' | ')));
+    lines.push(
+      chalk.white('  GLOBAL: ') +
+        parts1.map(p => colorByPct(p, extractPct(p))).join(chalk.gray(' | ')),
+    );
   }
 
   // Commodities + DXY + VIX line
   const parts2 = [];
   const crude = cues.commodities?.crudeWTI || cues.commodities?.brentCrude;
-  if (crude) parts2.push(`Crude: $${crude.price?.toFixed(0)}(${signedPct(crude.changePct)})`);
-  if (cues.currencies?.dollarIndex) parts2.push(`DXY: ${cues.currencies.dollarIndex.price?.toFixed(0)}(${signedPct(cues.currencies.dollarIndex.changePct)})`);
-  if (cues.volatility?.vix) parts2.push(`VIX: ${cues.volatility.vix.price?.toFixed(0)}(${signedPct(cues.volatility.vix.changePct)})`);
+  if (crude)
+    parts2.push(
+      `Crude: $${crude.price?.toFixed(0)}(${signedPct(crude.changePct)})`,
+    );
+  if (cues.currencies?.dollarIndex)
+    parts2.push(
+      `DXY: ${cues.currencies.dollarIndex.price?.toFixed(0)}(${signedPct(cues.currencies.dollarIndex.changePct)})`,
+    );
+  if (cues.volatility?.vix)
+    parts2.push(
+      `VIX: ${cues.volatility.vix.price?.toFixed(0)}(${signedPct(cues.volatility.vix.changePct)})`,
+    );
   if (parts2.length > 0) {
     lines.push(chalk.white('  ') + parts2.join(chalk.gray(' | ')));
   }
 
   // Sentiment bar
   if (cues.sentimentScore != null) {
-    lines.push(chalk.white('  MOOD: ') + displaySentimentBar(cues.sentimentScore));
+    lines.push(
+      chalk.white('  MOOD: ') + displaySentimentBar(cues.sentimentScore),
+    );
   }
 
   return lines;
@@ -194,12 +217,14 @@ export function displayHeader(title, subtitle) {
     ? `${chalk.bold.cyan(title)}\n${chalk.gray(subtitle)}`
     : chalk.bold.cyan(title);
 
-  console.log(boxen(content, {
-    padding: 1,
-    margin: { top: 1, bottom: 1 },
-    borderStyle: 'double',
-    borderColor: 'cyan',
-  }));
+  console.log(
+    boxen(content, {
+      padding: 1,
+      margin: { top: 1, bottom: 1 },
+      borderStyle: 'double',
+      borderColor: 'cyan',
+    }),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -235,10 +260,14 @@ export function displayTradeCard(trade, index = 1) {
   const lines = [];
 
   // Line 1: Big verdict — type badge + symbol + confidence bar + stars
-  lines.push(`  ${typeBadge}  ${chalk.bold.white(trade.symbol)}  ${confBlock}  ${stars}`);
+  lines.push(
+    `  ${typeBadge}  ${chalk.bold.white(trade.symbol)}  ${confBlock}  ${stars}`,
+  );
 
   // Line 2: Strike / expiry / lot
-  const strike = trade.strike ? `\u20B9${trade.strike.toLocaleString('en-IN')}` : '';
+  const strike = trade.strike
+    ? `\u20B9${trade.strike.toLocaleString('en-IN')}`
+    : '';
   const optType = isCall ? 'CE' : 'PE';
   const expiry = trade.expiry || '';
   const lot = trade.lotSize ? `Lot: ${trade.lotSize}` : '';
@@ -246,34 +275,48 @@ export function displayTradeCard(trade, index = 1) {
     strike ? `${strike} ${optType}` : '',
     expiry ? `${expiry} expiry` : '',
     lot,
-  ].filter(Boolean).join('  ');
+  ]
+    .filter(Boolean)
+    .join('  ');
   if (strikeLine) lines.push(`  ${chalk.white(strikeLine)}`);
 
   // Line 3: Entry → T1 → T2 flow
   const entry = trade.entry_price || trade.premium;
   const entryStr = entry ? `\u20B9${entry.toLocaleString('en-IN')}` : '—';
-  const t1Pct = entry && trade.target1
-    ? ` (${((trade.target1 - entry) / entry * 100).toFixed(0)}%)`
-    : '';
-  const t2Pct = entry && trade.target2
-    ? ` (${((trade.target2 - entry) / entry * 100).toFixed(0)}%)`
-    : '';
-  const t1Str = trade.target1 ? `\u20B9${trade.target1.toLocaleString('en-IN')}` : '—';
-  const t2Str = trade.target2 ? `\u20B9${trade.target2.toLocaleString('en-IN')}` : '—';
+  const t1Pct =
+    entry && trade.target1
+      ? ` (${(((trade.target1 - entry) / entry) * 100).toFixed(0)}%)`
+      : '';
+  const t2Pct =
+    entry && trade.target2
+      ? ` (${(((trade.target2 - entry) / entry) * 100).toFixed(0)}%)`
+      : '';
+  const t1Str = trade.target1
+    ? `\u20B9${trade.target1.toLocaleString('en-IN')}`
+    : '—';
+  const t2Str = trade.target2
+    ? `\u20B9${trade.target2.toLocaleString('en-IN')}`
+    : '—';
   lines.push(
     `  ${chalk.gray('Entry:')} ${chalk.white.bold(entryStr)}  ${chalk.gray('\u2192')}  ` +
-    `${chalk.gray('T1:')} ${chalk.green(t1Str + t1Pct)}  ${chalk.gray('\u2192')}  ` +
-    `${chalk.gray('T2:')} ${chalk.green(t2Str + t2Pct)}`
+      `${chalk.gray('T1:')} ${chalk.green(t1Str + t1Pct)}  ${chalk.gray('\u2192')}  ` +
+      `${chalk.gray('T2:')} ${chalk.green(t2Str + t2Pct)}`,
   );
 
   // Line 4: SL + Max Loss
-  const slPct = entry && trade.stop_loss
-    ? ` (${((trade.stop_loss - entry) / entry * 100).toFixed(0)}%)`
-    : '';
-  const slStr = trade.stop_loss ? `\u20B9${trade.stop_loss.toLocaleString('en-IN')}` : '—';
+  const slPct =
+    entry && trade.stop_loss
+      ? ` (${(((trade.stop_loss - entry) / entry) * 100).toFixed(0)}%)`
+      : '';
+  const slStr = trade.stop_loss
+    ? `\u20B9${trade.stop_loss.toLocaleString('en-IN')}`
+    : '—';
   const maxLoss = trade.maxLoss ? formatCurrency(trade.maxLoss) : '';
-  const slLine = `${chalk.gray('SL:')} ${chalk.red(slStr + slPct)}` +
-    (maxLoss ? `  ${chalk.gray('|')}  ${chalk.gray('Max Loss:')} ${chalk.red(maxLoss)}` : '');
+  const slLine =
+    `${chalk.gray('SL:')} ${chalk.red(slStr + slPct)}` +
+    (maxLoss
+      ? `  ${chalk.gray('|')}  ${chalk.gray('Max Loss:')} ${chalk.red(maxLoss)}`
+      : '');
   lines.push(`  ${slLine}`);
 
   // Line 5: Sector tag — compact inline
@@ -281,23 +324,34 @@ export function displayTradeCard(trade, index = 1) {
   if (trade.sector) sectorParts.push(trade.sector);
   if (trade.sectorRank != null) sectorParts.push(`#${trade.sectorRank}`);
   if (trade.sectorTrend) {
-    const trendIcon = trade.sectorTrend.includes('up') ? '↑' : trade.sectorTrend.includes('down') ? '↓' : '→';
+    const trendIcon = trade.sectorTrend.includes('up')
+      ? '↑'
+      : trade.sectorTrend.includes('down')
+        ? '↓'
+        : '→';
     sectorParts.push(trendIcon);
   }
   if (sectorParts.length > 0) {
-    const sectorColor = trade.sectorTrend?.includes('up') ? chalk.green
-      : trade.sectorTrend?.includes('down') ? chalk.red
-      : chalk.gray;
-    lines.push(`  ${chalk.gray('Sector:')} ${sectorColor(sectorParts.join(' '))}`);
+    const sectorColor = trade.sectorTrend?.includes('up')
+      ? chalk.green
+      : trade.sectorTrend?.includes('down')
+        ? chalk.red
+        : chalk.gray;
+    lines.push(
+      `  ${chalk.gray('Sector:')} ${sectorColor(sectorParts.join(' '))}`,
+    );
   }
 
   // Line 6: Fundamentals (PE, 52W, MCap) — only if data present
   const fundParts = [];
   if (trade.pe != null) fundParts.push(`PE: ${trade.pe}`);
   if (trade.week52Low != null && trade.week52High != null) {
-    fundParts.push(`52W: \u20B9${trade.week52Low.toLocaleString('en-IN')}-\u20B9${trade.week52High.toLocaleString('en-IN')}`);
+    fundParts.push(
+      `52W: \u20B9${trade.week52Low.toLocaleString('en-IN')}-\u20B9${trade.week52High.toLocaleString('en-IN')}`,
+    );
   }
-  if (trade.marketCap != null) fundParts.push(`MCap: ${formatMarketCap(trade.marketCap)}`);
+  if (trade.marketCap != null)
+    fundParts.push(`MCap: ${formatMarketCap(trade.marketCap)}`);
   if (trade.eps != null) fundParts.push(`EPS: \u20B9${trade.eps}`);
   if (fundParts.length > 0) {
     lines.push(`  ${chalk.cyan(fundParts.join('  |  '))}`);
@@ -306,8 +360,12 @@ export function displayTradeCard(trade, index = 1) {
   // Line 6: Technicals summary (RSI, MACD, Vol, ATR) — only if data present
   const techParts = [];
   if (trade.rsi != null) techParts.push(`RSI: ${trade.rsi}`);
-  if (trade.macdTrend) techParts.push(`MACD: ${trade.macdTrend.includes('bullish') ? '\u2191' : '\u2193'}`);
-  if (trade.volumeRatio != null) techParts.push(`Vol: ${trade.volumeRatio.toFixed(1)}x`);
+  if (trade.macdTrend)
+    techParts.push(
+      `MACD: ${trade.macdTrend.includes('bullish') ? '\u2191' : '\u2193'}`,
+    );
+  if (trade.volumeRatio != null)
+    techParts.push(`Vol: ${trade.volumeRatio.toFixed(1)}x`);
   if (trade.atrPct != null) techParts.push(`ATR: ${trade.atrPct.toFixed(1)}%`);
   if (techParts.length > 0) {
     lines.push(`  ${chalk.yellow(techParts.join('  '))}`);
@@ -315,7 +373,9 @@ export function displayTradeCard(trade, index = 1) {
 
   // Line 7: Candlestick patterns — only if present
   if (trade.patterns && trade.patterns.length > 0) {
-    const patStr = Array.isArray(trade.patterns) ? trade.patterns.join(' + ') : trade.patterns;
+    const patStr = Array.isArray(trade.patterns)
+      ? trade.patterns.join(' + ')
+      : trade.patterns;
     lines.push(`  ${chalk.gray('Patterns:')} ${chalk.magenta(patStr)}`);
   }
 
@@ -332,14 +392,16 @@ export function displayTradeCard(trade, index = 1) {
   // Render as boxen card
   const cardContent = lines.join('\n');
   const borderColor = isCall ? 'green' : 'red';
-  console.log(boxen(cardContent, {
-    padding: { top: 0, bottom: 0, left: 0, right: 1 },
-    margin: { top: 1, bottom: 0, left: 1, right: 0 },
-    borderStyle: 'round',
-    borderColor,
-    title: chalk.gray(`#${index}`),
-    titleAlignment: 'left',
-  }));
+  console.log(
+    boxen(cardContent, {
+      padding: { top: 0, bottom: 0, left: 0, right: 1 },
+      margin: { top: 1, bottom: 0, left: 1, right: 0 },
+      borderStyle: 'round',
+      borderColor,
+      title: chalk.gray(`#${index}`),
+      titleAlignment: 'left',
+    }),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -404,11 +466,12 @@ export function displayTradesTable(trades) {
   });
 
   for (const t of trades) {
-    const pnl = t.current_price && t.entry_price
-      ? (t.current_price - t.entry_price) * (t.quantity || 1)
-      : 0;
+    const pnl =
+      t.current_price && t.entry_price
+        ? (t.current_price - t.entry_price) * (t.quantity || 1)
+        : 0;
     const pnlPct = t.entry_price
-      ? ((t.current_price - t.entry_price) / t.entry_price * 100)
+      ? ((t.current_price - t.entry_price) / t.entry_price) * 100
       : 0;
     const pnlStr = `${formatCurrency(pnl)} (${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(1)}%)`;
     const pnlColored = pnl >= 0 ? chalk.green(pnlStr) : chalk.red(pnlStr);
@@ -444,17 +507,22 @@ export function displayMarketPulse(indexData) {
   const { nifty, bankNifty } = indexData;
 
   const niftyPrice = nifty.price ? nifty.price.toLocaleString('en-IN') : '—';
-  const bankNiftyPrice = bankNifty.price ? bankNifty.price.toLocaleString('en-IN') : '—';
+  const bankNiftyPrice = bankNifty.price
+    ? bankNifty.price.toLocaleString('en-IN')
+    : '—';
   const niftyChange = formatPercent(nifty.changePct);
   const bankNiftyChange = formatPercent(bankNifty.changePct);
 
-  const severityBadge = indexData.severity === 'critical'
-    ? chalk.bgRed.white.bold(' CRITICAL ')
-    : indexData.severity === 'warning'
-      ? chalk.bgYellow.black.bold(' WARNING ')
-      : chalk.bgGreen.black(' NORMAL ');
+  const severityBadge =
+    indexData.severity === 'critical'
+      ? chalk.bgRed.white.bold(' CRITICAL ')
+      : indexData.severity === 'warning'
+        ? chalk.bgYellow.black.bold(' WARNING ')
+        : chalk.bgGreen.black(' NORMAL ');
 
-  console.log(`\n  ${chalk.bold('NIFTY:')} ${niftyPrice} ${niftyChange}  ${chalk.gray('|')}  ${chalk.bold('BANKNIFTY:')} ${bankNiftyPrice} ${bankNiftyChange}  ${severityBadge}\n`);
+  console.log(
+    `\n  ${chalk.bold('NIFTY:')} ${niftyPrice} ${niftyChange}  ${chalk.gray('|')}  ${chalk.bold('BANKNIFTY:')} ${bankNiftyPrice} ${bankNiftyChange}  ${severityBadge}\n`,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -486,23 +554,44 @@ export function displayFiiDiiBar(fiiDiiData) {
   const diiNet = fiiDiiData.dii?.netValue;
   const sentiment = fiiDiiData.sentiment;
 
-  const fmtCr = (val) => {
+  const fmtCr = val => {
     if (val == null || isNaN(val)) return 'N/A';
     const sign = val >= 0 ? '+' : '';
     return `${sign}₹${Math.abs(val).toLocaleString('en-IN')} Cr`;
   };
 
-  const fiiLabel = fiiDiiData.fii?.signal === 'BUYING' ? chalk.green('buying')
-    : fiiDiiData.fii?.signal === 'SELLING' ? chalk.red('selling')
-    : chalk.gray('neutral');
-  const diiLabel = fiiDiiData.dii?.signal === 'BUYING' ? chalk.green('buying')
-    : fiiDiiData.dii?.signal === 'SELLING' ? chalk.red('selling')
-    : chalk.gray('neutral');
+  const fiiLabel =
+    fiiDiiData.fii?.signal === 'BUYING'
+      ? chalk.green('buying')
+      : fiiDiiData.fii?.signal === 'SELLING'
+        ? chalk.red('selling')
+        : chalk.gray('neutral');
+  const diiLabel =
+    fiiDiiData.dii?.signal === 'BUYING'
+      ? chalk.green('buying')
+      : fiiDiiData.dii?.signal === 'SELLING'
+        ? chalk.red('selling')
+        : chalk.gray('neutral');
 
-  const fiiStr = fiiNet != null ? (fiiNet >= 0 ? chalk.green(fmtCr(fiiNet)) : chalk.red(fmtCr(fiiNet))) : chalk.gray('N/A');
-  const diiStr = diiNet != null ? (diiNet >= 0 ? chalk.green(fmtCr(diiNet)) : chalk.red(fmtCr(diiNet))) : chalk.gray('N/A');
+  const fiiStr =
+    fiiNet != null
+      ? fiiNet >= 0
+        ? chalk.green(fmtCr(fiiNet))
+        : chalk.red(fmtCr(fiiNet))
+      : chalk.gray('N/A');
+  const diiStr =
+    diiNet != null
+      ? diiNet >= 0
+        ? chalk.green(fmtCr(diiNet))
+        : chalk.red(fmtCr(diiNet))
+      : chalk.gray('N/A');
 
-  const sentColor = sentiment === 'BULLISH' ? chalk.green : sentiment === 'BEARISH' ? chalk.red : chalk.yellow;
+  const sentColor =
+    sentiment === 'BULLISH'
+      ? chalk.green
+      : sentiment === 'BEARISH'
+        ? chalk.red
+        : chalk.yellow;
 
   return `${chalk.white('FII:')} ${fiiStr}(${fiiLabel}) ${chalk.gray('|')} ${chalk.white('DII:')} ${diiStr}(${diiLabel}) ${chalk.gray('|')} ${sentColor(sentiment)}`;
 }
@@ -515,13 +604,18 @@ export function displayFiiDiiBar(fiiDiiData) {
 export function displaySectorBar(sectorData) {
   if (!sectorData || sectorData.length === 0) return null;
 
-  const sorted = [...sectorData].sort((a, b) => (b.momentumScore || 0) - (a.momentumScore || 0));
+  const sorted = [...sectorData].sort(
+    (a, b) => (b.momentumScore || 0) - (a.momentumScore || 0),
+  );
   const top3 = sorted.slice(0, 3);
   const bot3 = sorted.slice(-3).reverse();
 
-  const fmtSector = (s) => {
+  const fmtSector = s => {
     const name = s.sector?.replace('Nifty ', '') || '?';
-    const pct = s.todayChange != null ? `${s.todayChange >= 0 ? '+' : ''}${s.todayChange.toFixed(1)}%` : '';
+    const pct =
+      s.todayChange != null
+        ? `${s.todayChange >= 0 ? '+' : ''}${s.todayChange.toFixed(1)}%`
+        : '';
     return pct ? `${name}(${pct})` : name;
   };
 
@@ -531,7 +625,12 @@ export function displaySectorBar(sectorData) {
   return `${chalk.white('HOT:')} ${hotStr}  ${chalk.gray('|')}  ${chalk.white('COLD:')} ${coldStr}`;
 }
 
-export function displayMorningBrief(recommendations, globalCues, fiiDiiData, sectorData) {
+export function displayMorningBrief(
+  recommendations,
+  globalCues,
+  fiiDiiData,
+  sectorData,
+) {
   const now = new Date();
   const dateStr = now.toLocaleDateString('en-IN', {
     day: '2-digit',
@@ -546,7 +645,9 @@ export function displayMorningBrief(recommendations, globalCues, fiiDiiData, sec
 
   // Build header block
   const headerLines = [];
-  headerLines.push(`  ${chalk.bold.cyan('TRADEORACLE')}${' '.repeat(20)}${chalk.gray(`${dateStr}  ${timeStr}`)}`);
+  headerLines.push(
+    `  ${chalk.bold.cyan('TRADEORACLE')}${' '.repeat(20)}${chalk.gray(`${dateStr}  ${timeStr}`)}`,
+  );
 
   // Global cues section
   if (globalCues) {
@@ -572,24 +673,30 @@ export function displayMorningBrief(recommendations, globalCues, fiiDiiData, sec
   headerLines.push(chalk.gray('  ' + '\u2500'.repeat(55)));
 
   const headerContent = headerLines.join('\n');
-  console.log(boxen(headerContent, {
-    padding: { top: 0, bottom: 0, left: 0, right: 1 },
-    margin: { top: 1, bottom: 0, left: 0, right: 0 },
-    borderStyle: 'double',
-    borderColor: 'cyan',
-  }));
+  console.log(
+    boxen(headerContent, {
+      padding: { top: 0, bottom: 0, left: 0, right: 1 },
+      margin: { top: 1, bottom: 0, left: 0, right: 0 },
+      borderStyle: 'double',
+      borderColor: 'cyan',
+    }),
+  );
 
   // Trade cards
   if (!recommendations || recommendations.length === 0) {
     console.log(chalk.yellow('\n  No trade recommendations today.\n'));
   } else {
-    console.log(chalk.bold.white(`\n  Top ${recommendations.length} Trade Ideas`));
+    console.log(
+      chalk.bold.white(`\n  Top ${recommendations.length} Trade Ideas`),
+    );
     recommendations.forEach((rec, i) => displayTradeCard(rec, i + 1));
   }
 
   // Action menu — compact
   console.log('');
   console.log(chalk.gray('  ' + '\u2500'.repeat(55)));
-  console.log(`  ${chalk.cyan('[E]')}xecute all  |  ${chalk.cyan('[1-' + (recommendations?.length || 'N') + ']')} specific  |  ${chalk.cyan('[S]')}kip  |  ${chalk.cyan('[D]')}eep #N`);
+  console.log(
+    `  ${chalk.cyan('[E]')}xecute all  |  ${chalk.cyan('[1-' + (recommendations?.length || 'N') + ']')} specific  |  ${chalk.cyan('[S]')}kip  |  ${chalk.cyan('[D]')}eep #N`,
+  );
   console.log('');
 }

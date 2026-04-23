@@ -8,18 +8,22 @@ const yahooFinance = new YahooFinance({ suppressNotices: ['yahooSurvey'] });
 // Sectoral Index Definitions
 // ---------------------------------------------------------------------------
 const SECTOR_INDICES = [
-  { sector: 'Bank',               symbol: '^NSEBANK',    nseIndex: 'Nifty Bank' },
-  { sector: 'IT',                 symbol: '^CNXIT',      nseIndex: 'Nifty IT' },
-  { sector: 'Pharma',             symbol: '^CNXPHARMA',  nseIndex: 'Nifty Pharma' },
-  { sector: 'Auto',               symbol: '^CNXAUTO',    nseIndex: 'Nifty Auto' },
-  { sector: 'Metal',              symbol: '^CNXMETAL',   nseIndex: 'Nifty Metal' },
-  { sector: 'Energy',             symbol: '^CNXENERGY',  nseIndex: 'Nifty Energy' },
-  { sector: 'FMCG',              symbol: '^CNXFMCG',    nseIndex: 'Nifty FMCG' },
-  { sector: 'Realty',             symbol: '^CNXREALTY',   nseIndex: 'Nifty Realty' },
-  { sector: 'Financial Services', symbol: '^CNXFIN',     nseIndex: 'Nifty Financial Services' },
-  { sector: 'Infrastructure',     symbol: '^CNXINFRA',   nseIndex: 'Nifty Infra' },
-  { sector: 'PSU Bank',           symbol: '^CNXPSUBANK', nseIndex: 'Nifty PSU Bank' },
-  { sector: 'Media',              symbol: '^CNXMEDIA',   nseIndex: 'Nifty Media' },
+  { sector: 'Bank', symbol: '^NSEBANK', nseIndex: 'Nifty Bank' },
+  { sector: 'IT', symbol: '^CNXIT', nseIndex: 'Nifty IT' },
+  { sector: 'Pharma', symbol: '^CNXPHARMA', nseIndex: 'Nifty Pharma' },
+  { sector: 'Auto', symbol: '^CNXAUTO', nseIndex: 'Nifty Auto' },
+  { sector: 'Metal', symbol: '^CNXMETAL', nseIndex: 'Nifty Metal' },
+  { sector: 'Energy', symbol: '^CNXENERGY', nseIndex: 'Nifty Energy' },
+  { sector: 'FMCG', symbol: '^CNXFMCG', nseIndex: 'Nifty FMCG' },
+  { sector: 'Realty', symbol: '^CNXREALTY', nseIndex: 'Nifty Realty' },
+  {
+    sector: 'Financial Services',
+    symbol: '^CNXFIN',
+    nseIndex: 'Nifty Financial Services',
+  },
+  { sector: 'Infrastructure', symbol: '^CNXINFRA', nseIndex: 'Nifty Infra' },
+  { sector: 'PSU Bank', symbol: '^CNXPSUBANK', nseIndex: 'Nifty PSU Bank' },
+  { sector: 'Media', symbol: '^CNXMEDIA', nseIndex: 'Nifty Media' },
 ];
 
 const NIFTY_SYMBOL = '^NSEI';
@@ -28,20 +32,20 @@ const NIFTY_SYMBOL = '^NSEI';
 // Stock sector → Sectoral index mapping
 // ---------------------------------------------------------------------------
 const STOCK_SECTOR_MAP = {
-  'Banking':    'Bank',
-  'Finance':    'Financial Services',
-  'IT':         'IT',
-  'Energy':     'Energy',
-  'Auto':       'Auto',
-  'Metals':     'Metal',
-  'Pharma':     'Pharma',
-  'Healthcare': 'Pharma',
-  'FMCG':       'FMCG',
-  'Consumer':   'FMCG',
-  'Infra':      'Infrastructure',
-  'Cement':     'Infrastructure',
-  'Telecom':    'IT',
-  'Index':      null,
+  Banking: 'Bank',
+  Finance: 'Financial Services',
+  IT: 'IT',
+  Energy: 'Energy',
+  Auto: 'Auto',
+  Metals: 'Metal',
+  Pharma: 'Pharma',
+  Healthcare: 'Pharma',
+  FMCG: 'FMCG',
+  Consumer: 'FMCG',
+  Infra: 'Infrastructure',
+  Cement: 'Infrastructure',
+  Telecom: 'IT',
+  Index: null,
 };
 
 // ---------------------------------------------------------------------------
@@ -79,8 +83,8 @@ async function fetchQuote(symbol) {
     const result = await yahooFinance.quote(symbol);
     if (!result || result.regularMarketPrice == null) return null;
     return {
-      price:     result.regularMarketPrice,
-      change:    result.regularMarketChange,
+      price: result.regularMarketPrice,
+      change: result.regularMarketChange,
       changePct: result.regularMarketChangePercent,
     };
   } catch {
@@ -107,9 +111,7 @@ async function fetchHistorical(symbol) {
     });
 
     const quotes = result.quotes || [];
-    return quotes
-      .filter(q => q.close != null)
-      .map(q => q.close);
+    return quotes.filter(q => q.close != null).map(q => q.close);
   } catch {
     return [];
   }
@@ -182,19 +184,24 @@ export async function getSectorStrength() {
   ]);
 
   const niftyTodayPct = niftyQuote?.changePct ?? 0;
-  const nifty5dPct = niftyHist.length >= 5
-    ? pctChange(niftyHist[niftyHist.length - 1], niftyHist[niftyHist.length - 5])
-    : 0;
-  const nifty20dPct = niftyHist.length >= 20
-    ? pctChange(niftyHist[niftyHist.length - 1], niftyHist[0])
-    : 0;
+  const nifty5dPct =
+    niftyHist.length >= 5
+      ? pctChange(
+          niftyHist[niftyHist.length - 1],
+          niftyHist[niftyHist.length - 5],
+        )
+      : 0;
+  const nifty20dPct =
+    niftyHist.length >= 20
+      ? pctChange(niftyHist[niftyHist.length - 1], niftyHist[0])
+      : 0;
 
   // Fetch all sector quotes + historicals in parallel
   const quoteResults = await Promise.allSettled(
-    SECTOR_INDICES.map(s => fetchQuote(s.symbol))
+    SECTOR_INDICES.map(s => fetchQuote(s.symbol)),
   );
   const histResults = await Promise.allSettled(
-    SECTOR_INDICES.map(s => fetchHistorical(s.symbol))
+    SECTOR_INDICES.map(s => fetchHistorical(s.symbol)),
   );
 
   const sectors = [];
@@ -202,20 +209,24 @@ export async function getSectorStrength() {
   for (let i = 0; i < SECTOR_INDICES.length; i++) {
     const def = SECTOR_INDICES[i];
 
-    const quote = quoteResults[i].status === 'fulfilled' ? quoteResults[i].value : null;
-    const hist  = histResults[i].status === 'fulfilled' ? histResults[i].value : [];
+    const quote =
+      quoteResults[i].status === 'fulfilled' ? quoteResults[i].value : null;
+    const hist =
+      histResults[i].status === 'fulfilled' ? histResults[i].value : [];
 
     if (!quote) continue; // skip unavailable index
 
     const todayChange = quote.changePct ?? 0;
 
-    const fiveDayChange = hist.length >= 5
-      ? pctChange(hist[hist.length - 1], hist[hist.length - 5])
-      : todayChange;
+    const fiveDayChange =
+      hist.length >= 5
+        ? pctChange(hist[hist.length - 1], hist[hist.length - 5])
+        : todayChange;
 
-    const twentyDayChange = hist.length >= 15
-      ? pctChange(hist[hist.length - 1], hist[0])
-      : fiveDayChange;
+    const twentyDayChange =
+      hist.length >= 15
+        ? pctChange(hist[hist.length - 1], hist[0])
+        : fiveDayChange;
 
     // Relative strength vs Nifty (today basis)
     const relativeStrength = +(todayChange - niftyTodayPct).toFixed(2);
@@ -230,12 +241,12 @@ export async function getSectorStrength() {
     const trend = determineTrend(momentumScore);
 
     sectors.push({
-      sector:           def.sector,
-      symbol:           def.symbol,
-      price:            quote.price,
-      todayChange:      +todayChange.toFixed(2),
-      fiveDayChange:    +fiveDayChange.toFixed(2),
-      twentyDayChange:  +twentyDayChange.toFixed(2),
+      sector: def.sector,
+      symbol: def.symbol,
+      price: quote.price,
+      todayChange: +todayChange.toFixed(2),
+      fiveDayChange: +fiveDayChange.toFixed(2),
+      twentyDayChange: +twentyDayChange.toFixed(2),
       relativeStrength,
       momentumScore,
       trend,
@@ -245,7 +256,9 @@ export async function getSectorStrength() {
 
   // Sort by momentum score descending
   sectors.sort((a, b) => b.momentumScore - a.momentumScore);
-  sectors.forEach((s, idx) => { s.rank = idx + 1; });
+  sectors.forEach((s, idx) => {
+    s.rank = idx + 1;
+  });
 
   cacheSet('sectorStrength', sectors);
   return sectors;
@@ -260,7 +273,7 @@ export async function getSectorStrength() {
  */
 export async function getSectorForStock(symbol) {
   const stock = FNO_STOCKS.find(
-    s => s.symbol.toUpperCase() === symbol.toUpperCase()
+    s => s.symbol.toUpperCase() === symbol.toUpperCase(),
   );
   if (!stock) return null;
 
@@ -285,12 +298,12 @@ export async function getSectorSummary() {
   const hot = sectors.slice(0, 3);
   const cold = sectors.slice(-3).reverse();
 
-  const fmtSector = (s) => {
+  const fmtSector = s => {
     const sign = s.todayChange >= 0 ? '+' : '';
     return `${s.sector}(${sign}${s.todayChange}%)`;
   };
 
-  const hotStr  = hot.map(fmtSector).join(' ');
+  const hotStr = hot.map(fmtSector).join(' ');
   const coldStr = cold.map(fmtSector).join(' ');
 
   const rotation = detectRotation(sectors);
@@ -333,7 +346,7 @@ export async function getBottomSectors(n = 3) {
 function detectRotation(sectors) {
   if (sectors.length === 0) return 'Unknown';
 
-  const upCount   = sectors.filter(s => s.todayChange > 0.2).length;
+  const upCount = sectors.filter(s => s.todayChange > 0.2).length;
   const downCount = sectors.filter(s => s.todayChange < -0.2).length;
 
   // Broad moves first
@@ -343,17 +356,17 @@ function detectRotation(sectors) {
   // Check top 4 sectors for theme
   const topSectors = new Set(sectors.slice(0, 4).map(s => s.sector));
 
-  const riskOnNames  = ['Bank', 'IT', 'Auto', 'Financial Services'];
+  const riskOnNames = ['Bank', 'IT', 'Auto', 'Financial Services'];
   const defensiveNames = ['FMCG', 'Pharma'];
   const commodityNames = ['Metal', 'Energy'];
 
-  const riskOnCount    = riskOnNames.filter(n => topSectors.has(n)).length;
+  const riskOnCount = riskOnNames.filter(n => topSectors.has(n)).length;
   const defensiveCount = defensiveNames.filter(n => topSectors.has(n)).length;
   const commodityCount = commodityNames.filter(n => topSectors.has(n)).length;
 
-  if (commodityCount >= 2)  return 'Commodity Play';
-  if (defensiveCount >= 2)  return 'Defensive';
-  if (riskOnCount >= 2)     return 'Risk-On';
+  if (commodityCount >= 2) return 'Commodity Play';
+  if (defensiveCount >= 2) return 'Defensive';
+  if (riskOnCount >= 2) return 'Risk-On';
 
   return 'Mixed';
 }

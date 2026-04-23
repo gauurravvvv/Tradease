@@ -33,7 +33,7 @@ export function generateReport(trades, equityCurve, startingCapital) {
 
   for (const point of equityCurve) {
     if (point.capital > peak) peak = point.capital;
-    const dd = (peak - point.capital) / peak * 100;
+    const dd = ((peak - point.capital) / peak) * 100;
     if (dd > maxDrawdown) {
       maxDrawdown = dd;
       maxDrawdownAmount = peak - point.capital;
@@ -46,53 +46,91 @@ export function generateReport(trades, equityCurve, startingCapital) {
     .map(t => (new Date(t.exitDate) - new Date(t.entryDate)) / 86400000);
 
   const avgHoldingDays = holdingDays.length
-    ? Math.round(holdingDays.reduce((s, d) => s + d, 0) / holdingDays.length * 10) / 10
+    ? Math.round(
+        (holdingDays.reduce((s, d) => s + d, 0) / holdingDays.length) * 10,
+      ) / 10
     : 0;
 
   // Streaks
-  let maxWinStreak = 0, maxLossStreak = 0, curWin = 0, curLoss = 0;
+  let maxWinStreak = 0,
+    maxLossStreak = 0,
+    curWin = 0,
+    curLoss = 0;
   for (const t of trades) {
-    if (t.pnl > 0) { curWin++; curLoss = 0; maxWinStreak = Math.max(maxWinStreak, curWin); }
-    else { curLoss++; curWin = 0; maxLossStreak = Math.max(maxLossStreak, curLoss); }
+    if (t.pnl > 0) {
+      curWin++;
+      curLoss = 0;
+      maxWinStreak = Math.max(maxWinStreak, curWin);
+    } else {
+      curLoss++;
+      curWin = 0;
+      maxLossStreak = Math.max(maxLossStreak, curLoss);
+    }
   }
 
   // Sharpe ratio (annualized, assuming 252 trading days)
   const dailyReturns = [];
   for (let i = 1; i < equityCurve.length; i++) {
-    const ret = (equityCurve[i].capital - equityCurve[i - 1].capital) / equityCurve[i - 1].capital;
+    const ret =
+      (equityCurve[i].capital - equityCurve[i - 1].capital) /
+      equityCurve[i - 1].capital;
     dailyReturns.push(ret);
   }
   const avgReturn = dailyReturns.length
     ? dailyReturns.reduce((s, r) => s + r, 0) / dailyReturns.length
     : 0;
-  const stdDev = dailyReturns.length > 1
-    ? Math.sqrt(dailyReturns.reduce((s, r) => s + (r - avgReturn) ** 2, 0) / (dailyReturns.length - 1))
-    : 0;
-  const sharpeRatio = stdDev > 0 ? Math.round((avgReturn / stdDev) * Math.sqrt(252) * 100) / 100 : 0;
+  const stdDev =
+    dailyReturns.length > 1
+      ? Math.sqrt(
+          dailyReturns.reduce((s, r) => s + (r - avgReturn) ** 2, 0) /
+            (dailyReturns.length - 1),
+        )
+      : 0;
+  const sharpeRatio =
+    stdDev > 0
+      ? Math.round((avgReturn / stdDev) * Math.sqrt(252) * 100) / 100
+      : 0;
 
-  const finalCapital = equityCurve.length ? equityCurve[equityCurve.length - 1].capital : startingCapital;
+  const finalCapital = equityCurve.length
+    ? equityCurve[equityCurve.length - 1].capital
+    : startingCapital;
 
   return {
     totalTrades: trades.length,
     winners: winners.length,
     losers: losers.length,
-    winRate: Math.round(winners.length / trades.length * 100 * 10) / 10,
+    winRate: Math.round((winners.length / trades.length) * 100 * 10) / 10,
     avgWin: winners.length ? Math.round(grossProfit / winners.length) : 0,
     avgLoss: losers.length ? Math.round(grossLoss / losers.length) * -1 : 0,
-    profitFactor: grossLoss > 0 ? Math.round(grossProfit / grossLoss * 100) / 100 : grossProfit > 0 ? Infinity : 0,
+    profitFactor:
+      grossLoss > 0
+        ? Math.round((grossProfit / grossLoss) * 100) / 100
+        : grossProfit > 0
+          ? Infinity
+          : 0,
     totalPnl: Math.round(totalPnl),
-    totalReturnPct: Math.round((finalCapital - startingCapital) / startingCapital * 100 * 100) / 100,
+    totalReturnPct:
+      Math.round(
+        ((finalCapital - startingCapital) / startingCapital) * 100 * 100,
+      ) / 100,
     maxDrawdown: Math.round(maxDrawdown * 100) / 100,
     maxDrawdownAmount: Math.round(maxDrawdownAmount),
     sharpeRatio,
     avgHoldingDays,
-    bestTrade: trades.length ? Math.round(Math.max(...trades.map(t => t.pnl))) : 0,
-    worstTrade: trades.length ? Math.round(Math.min(...trades.map(t => t.pnl))) : 0,
+    bestTrade: trades.length
+      ? Math.round(Math.max(...trades.map(t => t.pnl)))
+      : 0,
+    worstTrade: trades.length
+      ? Math.round(Math.min(...trades.map(t => t.pnl)))
+      : 0,
     consecutiveWins: maxWinStreak,
     consecutiveLosses: maxLossStreak,
-    recoveryFactor: maxDrawdown > 0
-      ? Math.round((finalCapital - startingCapital) / maxDrawdownAmount * 100) / 100
-      : 0,
+    recoveryFactor:
+      maxDrawdown > 0
+        ? Math.round(
+            ((finalCapital - startingCapital) / maxDrawdownAmount) * 100,
+          ) / 100
+        : 0,
   };
 }
 
@@ -113,7 +151,8 @@ export function saveBacktestResult(result) {
   fs.writeFileSync(filepath, JSON.stringify(result, null, 2));
 
   // Auto-prune: keep only MAX_RESULTS most recent
-  const files = fs.readdirSync(BACKTESTS_DIR)
+  const files = fs
+    .readdirSync(BACKTESTS_DIR)
     .filter(f => f.endsWith('.json'))
     .sort()
     .reverse();
@@ -132,7 +171,8 @@ export function saveBacktestResult(result) {
 export function loadLatestBacktest() {
   if (!fs.existsSync(BACKTESTS_DIR)) return null;
 
-  const files = fs.readdirSync(BACKTESTS_DIR)
+  const files = fs
+    .readdirSync(BACKTESTS_DIR)
     .filter(f => f.endsWith('.json'))
     .sort()
     .reverse();
@@ -150,7 +190,8 @@ export function loadLatestBacktest() {
 export function listBacktests() {
   if (!fs.existsSync(BACKTESTS_DIR)) return [];
 
-  return fs.readdirSync(BACKTESTS_DIR)
+  return fs
+    .readdirSync(BACKTESTS_DIR)
     .filter(f => f.endsWith('.json'))
     .sort()
     .reverse()
@@ -175,11 +216,23 @@ export function listBacktests() {
 
 function emptyMetrics(startingCapital) {
   return {
-    totalTrades: 0, winners: 0, losers: 0, winRate: 0,
-    avgWin: 0, avgLoss: 0, profitFactor: 0,
-    totalPnl: 0, totalReturnPct: 0,
-    maxDrawdown: 0, maxDrawdownAmount: 0, sharpeRatio: 0,
-    avgHoldingDays: 0, bestTrade: 0, worstTrade: 0,
-    consecutiveWins: 0, consecutiveLosses: 0, recoveryFactor: 0,
+    totalTrades: 0,
+    winners: 0,
+    losers: 0,
+    winRate: 0,
+    avgWin: 0,
+    avgLoss: 0,
+    profitFactor: 0,
+    totalPnl: 0,
+    totalReturnPct: 0,
+    maxDrawdown: 0,
+    maxDrawdownAmount: 0,
+    sharpeRatio: 0,
+    avgHoldingDays: 0,
+    bestTrade: 0,
+    worstTrade: 0,
+    consecutiveWins: 0,
+    consecutiveLosses: 0,
+    recoveryFactor: 0,
   };
 }

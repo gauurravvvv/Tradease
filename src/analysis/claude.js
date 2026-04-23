@@ -26,24 +26,30 @@ export async function askClaude(prompt, options = {}) {
     let stdout = '';
     let stderr = '';
 
-    child.stdout.on('data', (chunk) => { stdout += chunk.toString(); });
-    child.stderr.on('data', (chunk) => { stderr += chunk.toString(); });
+    child.stdout.on('data', chunk => {
+      stdout += chunk.toString();
+    });
+    child.stderr.on('data', chunk => {
+      stderr += chunk.toString();
+    });
 
     const timer = setTimeout(() => {
       child.kill('SIGTERM');
       reject(new Error(`Claude CLI timed out after ${timeout}ms`));
     }, timeout);
 
-    child.on('close', (code) => {
+    child.on('close', code => {
       clearTimeout(timer);
       if (code === 0) {
         resolve(stdout.trim());
       } else {
-        reject(new Error(`Claude CLI exited with code ${code}: ${stderr.trim()}`));
+        reject(
+          new Error(`Claude CLI exited with code ${code}: ${stderr.trim()}`),
+        );
       }
     });
 
-    child.on('error', (err) => {
+    child.on('error', err => {
       clearTimeout(timer);
       reject(new Error(`Claude CLI spawn failed: ${err.message}`));
     });
@@ -57,21 +63,26 @@ function extractJson(text) {
   // Try direct parse first
   try {
     return JSON.parse(text);
-  } catch { /* fall through */ }
+  } catch {
+    /* fall through */
+  }
 
   // Strip markdown code fences
   const fenceMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)```/);
   if (fenceMatch) {
     try {
       return JSON.parse(fenceMatch[1].trim());
-    } catch { /* fall through */ }
+    } catch {
+      /* fall through */
+    }
   }
 
   // Last resort: find first { or [ and parse from there
   const firstBrace = text.indexOf('{');
   const firstBracket = text.indexOf('[');
   let start = -1;
-  if (firstBrace === -1 && firstBracket === -1) throw new Error('No JSON found in response');
+  if (firstBrace === -1 && firstBracket === -1)
+    throw new Error('No JSON found in response');
   if (firstBrace === -1) start = firstBracket;
   else if (firstBracket === -1) start = firstBrace;
   else start = Math.min(firstBrace, firstBracket);
@@ -105,7 +116,10 @@ function compressStockData(s) {
   return {
     sym: s.symbol,
     px: s.price,
-    chg: s.changePct != null ? `${s.changePct > 0 ? '+' : ''}${s.changePct.toFixed(1)}%` : s.change,
+    chg:
+      s.changePct != null
+        ? `${s.changePct > 0 ? '+' : ''}${s.changePct.toFixed(1)}%`
+        : s.change,
     vol: s.volume,
     sector: s.sector || null,
     secRank: s.sectorRank || null,
@@ -124,11 +138,16 @@ function compressStockData(s) {
     sma20: t.movingAverages?.sma20,
     sma50: t.movingAverages?.sma50,
     sma200: t.movingAverages?.sma200,
-    patterns: t.candlestickPatterns?.filter(p => p.significance === 'high')?.map(p => p.name) || [],
-    fib: t.fibonacci?.levels ? {
-      '0.382': t.fibonacci.levels['0.382'],
-      '0.618': t.fibonacci.levels['0.618'],
-    } : null,
+    patterns:
+      t.candlestickPatterns
+        ?.filter(p => p.significance === 'high')
+        ?.map(p => p.name) || [],
+    fib: t.fibonacci?.levels
+      ? {
+          0.382: t.fibonacci.levels['0.382'],
+          0.618: t.fibonacci.levels['0.618'],
+        }
+      : null,
     pe: s.fundamentals?.pe,
     mcap: s.fundamentals?.marketCap,
     w52h: s.fundamentals?.fiftyTwoWeekHigh,
@@ -151,15 +170,20 @@ export async function analyzeStocksForTrading(stockDataArray, context = {}) {
   // Build market context string
   const contextParts = [];
   if (context.fiiDii) {
-    contextParts.push(`FII/DII: ${context.fiiDii.summary || context.fiiDii.sentiment || 'N/A'}`);
+    contextParts.push(
+      `FII/DII: ${context.fiiDii.summary || context.fiiDii.sentiment || 'N/A'}`,
+    );
   }
   if (context.globalCues) {
-    contextParts.push(`Global: ${context.globalCues.sentiment || 'N/A'} (score: ${context.globalCues.sentimentScore || 0})`);
+    contextParts.push(
+      `Global: ${context.globalCues.sentiment || 'N/A'} (score: ${context.globalCues.sentimentScore || 0})`,
+    );
   }
   if (context.sectorRotation) {
     contextParts.push(`Sector rotation: ${context.sectorRotation}`);
   }
-  const mktContext = contextParts.length > 0 ? contextParts.join(' | ') : 'Not available';
+  const mktContext =
+    contextParts.length > 0 ? contextParts.join(' | ') : 'Not available';
 
   const prompt = `You are an expert Indian F&O options trader. Today's date: ${new Date().toISOString().split('T')[0]}.
 
@@ -208,7 +232,9 @@ RESPOND WITH VALID JSON ONLY. No markdown, no explanation, just the JSON array.`
   try {
     const raw = await askClaude(prompt, { timeout: 120_000 });
     const parsed = extractJson(raw);
-    const results = Array.isArray(parsed) ? parsed : parsed.recommendations ?? parsed.stocks ?? [parsed];
+    const results = Array.isArray(parsed)
+      ? parsed
+      : (parsed.recommendations ?? parsed.stocks ?? [parsed]);
 
     // Normalize field names and validate
     return results
@@ -232,7 +258,7 @@ RESPOND WITH VALID JSON ONLY. No markdown, no explanation, just the JSON array.`
       .sort((a, b) => b.confidence - a.confidence);
   } catch (err) {
     console.error('[claude] analyzeStocksForTrading failed:', err.message);
-    return stockDataArray.map((s) => fallbackRecommendation(s.symbol));
+    return stockDataArray.map(s => fallbackRecommendation(s.symbol));
   }
 }
 
@@ -262,17 +288,28 @@ export async function analyzeStockQuick(stockData) {
     px: stockData.price,
     chg: stockData.change,
     vol: stockData.volume,
-    rsi: t.rsi?.value, macd: t.macd?.trend,
-    atr: t.atr?.value, bbPos: t.bollingerBands?.position,
-    signal: t.overallSignal, score: t.score,
+    rsi: t.rsi?.value,
+    macd: t.macd?.trend,
+    atr: t.atr?.value,
+    bbPos: t.bollingerBands?.position,
+    signal: t.overallSignal,
+    score: t.score,
     sup: t.supportResistance?.supports?.slice(0, 2),
     res: t.supportResistance?.resistances?.slice(0, 2),
-    patterns: t.candlestickPatterns?.filter(p => p.significance === 'high')?.map(p => p.name) || [],
+    patterns:
+      t.candlestickPatterns
+        ?.filter(p => p.significance === 'high')
+        ?.map(p => p.name) || [],
   };
 
-  const newsStr = Array.isArray(stockData.news) && stockData.news.length > 0
-    ? stockData.news.slice(0, 5).map(n => typeof n === 'string' ? n : n.title || '').filter(Boolean).join('; ')
-    : 'None';
+  const newsStr =
+    Array.isArray(stockData.news) && stockData.news.length > 0
+      ? stockData.news
+          .slice(0, 5)
+          .map(n => (typeof n === 'string' ? n : n.title || ''))
+          .filter(Boolean)
+          .join('; ')
+      : 'None';
 
   const prompt = `Expert Indian F&O trader. Quick analysis for ${stockData.symbol}.
 
@@ -325,18 +362,34 @@ export async function analyzeStockDeep(stockData) {
 
   // Compress technicals
   const techCompact = {
-    rsi: t.rsi?.value, rsiSig: t.rsi?.signal,
-    macd: t.macd?.trend, macdHist: t.macd?.histogram,
-    atr: t.atr?.value, atrPct: t.atr?.percentage,
-    bb: { pos: t.bollingerBands?.position, upper: t.bollingerBands?.upper, lower: t.bollingerBands?.lower },
-    sma: { s20: t.movingAverages?.sma20, s50: t.movingAverages?.sma50, s200: t.movingAverages?.sma200 },
+    rsi: t.rsi?.value,
+    rsiSig: t.rsi?.signal,
+    macd: t.macd?.trend,
+    macdHist: t.macd?.histogram,
+    atr: t.atr?.value,
+    atrPct: t.atr?.percentage,
+    bb: {
+      pos: t.bollingerBands?.position,
+      upper: t.bollingerBands?.upper,
+      lower: t.bollingerBands?.lower,
+    },
+    sma: {
+      s20: t.movingAverages?.sma20,
+      s50: t.movingAverages?.sma50,
+      s200: t.movingAverages?.sma200,
+    },
     ema: { e9: t.movingAverages?.ema9, e21: t.movingAverages?.ema21 },
-    volRatio: t.volume?.ratio, volSignal: t.volume?.signal,
-    signal: t.overallSignal, score: t.score,
+    volRatio: t.volume?.ratio,
+    volSignal: t.volume?.signal,
+    signal: t.overallSignal,
+    score: t.score,
     sup: t.supportResistance?.supports,
     res: t.supportResistance?.resistances,
     fib: t.fibonacci?.levels,
-    patterns: t.candlestickPatterns?.map(p => `${p.name}(${p.type},${p.significance})`) || [],
+    patterns:
+      t.candlestickPatterns?.map(
+        p => `${p.name}(${p.type},${p.significance})`,
+      ) || [],
   };
 
   // Compress 90d history to key stats
@@ -348,7 +401,7 @@ export async function analyzeStockDeep(stockData) {
     const low90 = Math.min(...closes);
     const first = closes[0];
     const last = closes[closes.length - 1];
-    const change90 = ((last - first) / first * 100).toFixed(1);
+    const change90 = (((last - first) / first) * 100).toFixed(1);
     histSummary = `90d: ${low90.toFixed(0)}-${high90.toFixed(0)}, change: ${change90}%, days: ${closes.length}`;
   }
 
@@ -360,17 +413,27 @@ export async function analyzeStockDeep(stockData) {
       .filter(c => c.openInterest > 0)
       .sort((a, b) => b.openInterest - a.openInterest)
       .slice(0, 5)
-      .map(c => `${c.strike}CE: OI=${c.openInterest}, IV=${(c.impliedVolatility * 100).toFixed(0)}%, Px=${c.lastPrice}`);
+      .map(
+        c =>
+          `${c.strike}CE: OI=${c.openInterest}, IV=${(c.impliedVolatility * 100).toFixed(0)}%, Px=${c.lastPrice}`,
+      );
     const nearPuts = (oc.puts || [])
       .filter(p => p.openInterest > 0)
       .sort((a, b) => b.openInterest - a.openInterest)
       .slice(0, 5)
-      .map(p => `${p.strike}PE: OI=${p.openInterest}, IV=${(p.impliedVolatility * 100).toFixed(0)}%, Px=${p.lastPrice}`);
+      .map(
+        p =>
+          `${p.strike}PE: OI=${p.openInterest}, IV=${(p.impliedVolatility * 100).toFixed(0)}%, Px=${p.lastPrice}`,
+      );
     optionsStr = `Top CE by OI: ${nearCalls.join('; ')} | Top PE by OI: ${nearPuts.join('; ')}`;
   }
 
   const newsStr = Array.isArray(stockData.news)
-    ? stockData.news.slice(0, 10).map(n => typeof n === 'string' ? n : n.title || '').filter(Boolean).join('; ')
+    ? stockData.news
+        .slice(0, 10)
+        .map(n => (typeof n === 'string' ? n : n.title || ''))
+        .filter(Boolean)
+        .join('; ')
     : 'None';
 
   const prompt = `Senior Indian F&O analyst. Deep analysis for ${stockData.symbol} (₹${stockData.price}, ${stockData.change}%).
@@ -427,7 +490,11 @@ RULES:
       type: normalizeType(result.type || result.recommendation),
       confidence: result.confidence ?? 0,
       reasoning: result.reasoning || '',
-      entry_price: result.entryStrategy?.entry_price ?? result.entry_price ?? result.entryPrice ?? null,
+      entry_price:
+        result.entryStrategy?.entry_price ??
+        result.entry_price ??
+        result.entryPrice ??
+        null,
       entryCondition: result.entryStrategy?.entryCondition ?? null,
       stop_loss: result.stop_loss ?? result.stopLoss ?? null,
       target1: result.exitStrategy?.target1 ?? result.target1 ?? null,
@@ -462,7 +529,9 @@ RULES:
  * @returns {Promise<{sentiment, score, keyPoints, tradingImpact}>}
  */
 export async function interpretNews(newsItems, symbol) {
-  const headlines = newsItems.map((n) => (typeof n === 'string' ? n : n.title ?? JSON.stringify(n)));
+  const headlines = newsItems.map(n =>
+    typeof n === 'string' ? n : (n.title ?? JSON.stringify(n)),
+  );
 
   const prompt = [
     `You are an expert market analyst. Interpret the following news for ${symbol}.`,

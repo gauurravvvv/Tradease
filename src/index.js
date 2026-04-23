@@ -6,18 +6,35 @@ import { runScan, autoExecuteTrades } from './cli/scan.js';
 import { runResearch } from './cli/research.js';
 import { runNewsDigest } from './cli/news.js';
 import { showPortfolio, showTrades, showHistory } from './cli/portfolio.js';
-import { displayHeader, displayMarketPulse, formatCurrency } from './cli/display.js';
+import {
+  displayHeader,
+  displayMarketPulse,
+  formatCurrency,
+} from './cli/display.js';
 import { startDashboard } from './dashboard/server.js';
 import { runMarketStatus } from './cli/status.js';
 import { createScheduler } from './scheduler/cron.js';
 import { ListenerManager } from './listeners/manager.js';
 import { checkIndexHealth } from './listeners/index-monitor.js';
 import { getOpenTrades, exitTrade } from './trading/manager.js';
-import { getPortfolioSummary, saveDailySummary, getPerformanceStats } from './trading/portfolio.js';
+import {
+  getPortfolioSummary,
+  saveDailySummary,
+  getPerformanceStats,
+} from './trading/portfolio.js';
 import { getDb, closeDb } from './db/sqlite.js';
-import { SCHEDULE } from './config/settings.js';
+import { SCHEDULE, TRADING } from './config/settings.js';
 import { logger, cleanOldLogs } from './utils/logger.js';
-import { notifyScanComplete, notifyDaemonStart, notifyDaemonStop, notifyDailySummary } from './utils/notify.js';
+import {
+  notifyScanComplete,
+  notifyDaemonStart,
+  notifyDaemonStop,
+  notifyDailySummary,
+  notifyMorningSummary,
+} from './utils/notify.js';
+import { loadPersistedConfig, getConfigSection } from './config/persist.js';
+import { configureEmail } from './utils/emailer.js';
+import { configureTelegram } from './utils/telegram.js';
 
 const program = new Command();
 
@@ -32,7 +49,7 @@ program
   .description('Run pre-market scan — find top F&O trade ideas')
   .option('--no-interactive', 'Skip interactive prompt')
   .option('-n, --top <number>', 'Number of stocks to screen', '15')
-  .action(async (opts) => {
+  .action(async opts => {
     try {
       getDb(); // Ensure DB initialized
       await runScan({
@@ -48,7 +65,9 @@ program
 // ─── research ───────────────────────────────────────────────────────────────
 program
   .command('research <modeOrSymbol> [symbol]')
-  .description('Research a stock — `research quick RELIANCE` or `research deep RELIANCE` or `research RELIANCE --deep`')
+  .description(
+    'Research a stock — `research quick RELIANCE` or `research deep RELIANCE` or `research RELIANCE --deep`',
+  )
   .option('-d, --deep', 'Run deep analysis (90-day history + options)')
   .action(async (modeOrSymbol, symbol, opts) => {
     try {
@@ -62,7 +81,9 @@ program
         if (opts.deep) mode = 'deep';
       }
       if (!sym) {
-        console.error(chalk.red('Usage: tradease research [quick|deep] <SYMBOL>'));
+        console.error(
+          chalk.red('Usage: tradease research [quick|deep] <SYMBOL>'),
+        );
         process.exit(1);
       }
       await runResearch(sym.toUpperCase(), mode);
@@ -78,7 +99,7 @@ program
   .description('Top 15 stocks — consolidated news + sentiment')
   .option('-n, --top <number>', 'Number of stocks', '15')
   .option('-d, --detail', 'Show all headlines')
-  .action(async (opts) => {
+  .action(async opts => {
     try {
       await runNewsDigest({
         topN: parseInt(opts.top, 10),
@@ -123,7 +144,7 @@ program
   .command('history')
   .description('Show closed trades + win rate + performance stats')
   .option('-d, --days <number>', 'Look back N days', '30')
-  .action(async (opts) => {
+  .action(async opts => {
     try {
       getDb();
       await showHistory(parseInt(opts.days, 10));
@@ -154,9 +175,13 @@ program
         const { getQuote } = await import('./data/market.js');
         const quote = await getQuote(sym);
         exitPrice = quote.price;
-      } catch { /* use last known */ }
+      } catch {
+        /* use last known */
+      }
       exitTrade(trade.id, exitPrice, opts.reason);
-      console.log(chalk.green(`Exited position: ${sym} at ${formatCurrency(exitPrice)}`));
+      console.log(
+        chalk.green(`Exited position: ${sym} at ${formatCurrency(exitPrice)}`),
+      );
     } catch (err) {
       console.error(chalk.red(`Exit failed: ${err.message}`));
       process.exit(1);
@@ -167,7 +192,9 @@ program
 program
   .command('status')
   .alias('pulse')
-  .description('Full market status — indices, global cues, FII/DII, sectors, VIX')
+  .description(
+    'Full market status — indices, global cues, FII/DII, sectors, VIX',
+  )
   .action(async () => {
     try {
       await runMarketStatus();
@@ -182,13 +209,15 @@ program
   .command('dashboard')
   .description('Launch web dashboard — trades, P&L, sentiment')
   .option('-p, --port <number>', 'Port number', '3777')
-  .action(async (opts) => {
+  .action(async opts => {
     try {
       getDb();
       const port = parseInt(opts.port, 10);
       displayHeader('Tradease Dashboard', `http://localhost:${port}`);
       startDashboard(port);
-      console.log(chalk.green.bold(`\n  Dashboard running at http://localhost:${port}`));
+      console.log(
+        chalk.green.bold(`\n  Dashboard running at http://localhost:${port}`),
+      );
       console.log(chalk.gray('  Press Ctrl+C to stop.\n'));
     } catch (err) {
       console.error(chalk.red(`Dashboard failed: ${err.message}`));
@@ -201,10 +230,11 @@ program
   .command('agents')
   .description('Start autonomous trading agents (news + trade + position)')
   .option('-p, --port <number>', 'Also start dashboard on this port')
-  .action(async (opts) => {
+  .action(async opts => {
     try {
       getDb();
-      const { AgentOrchestrator, setOrchestrator } = await import('./agents/orchestrator.js');
+      const { AgentOrchestrator, setOrchestrator } =
+        await import('./agents/orchestrator.js');
       const orchestrator = new AgentOrchestrator();
       setOrchestrator(orchestrator);
 
@@ -213,29 +243,54 @@ program
       await orchestrator.start();
 
       console.log(chalk.bold.white('\n  Agents:'));
-      console.log(chalk.cyan('    News Sentinel      — every 5 min  (rule-based sentiment)'));
-      console.log(chalk.green('    Trade Strategist   — every 10 min (rule-based entries)'));
-      console.log(chalk.yellow('    Position Guardian  — every 2 min  (mechanical exits)'));
-      console.log(chalk.gray('\n  Claude called ONLY at decision boundaries (Haiku model)'));
+      console.log(
+        chalk.cyan(
+          '    News Sentinel      — every 5 min  (rule-based sentiment)',
+        ),
+      );
+      console.log(
+        chalk.green(
+          '    Trade Strategist   — every 10 min (rule-based entries)',
+        ),
+      );
+      console.log(
+        chalk.yellow(
+          '    Position Guardian  — every 2 min  (mechanical exits)',
+        ),
+      );
+      console.log(
+        chalk.gray(
+          '\n  Claude called ONLY at decision boundaries (Haiku model)',
+        ),
+      );
 
       // Optionally start dashboard too
       if (opts.port) {
         const port = parseInt(opts.port, 10);
         startDashboard(port);
-        console.log(chalk.green.bold(`\n  Dashboard: http://localhost:${port}`));
+        console.log(
+          chalk.green.bold(`\n  Dashboard: http://localhost:${port}`),
+        );
       }
 
       console.log(chalk.green.bold('\n  All agents running autonomously.'));
       console.log(chalk.gray('  Press Ctrl+C to stop.\n'));
 
       // Stats every 5 min
-      setInterval(() => {
-        const status = orchestrator.getStatus();
-        for (const a of status.agents) {
-          const name = (a.name || '').padEnd(20);
-          console.log(chalk.gray(`  [${name}] runs:${a.runs||0} claude:${a.claudeCalls||0} tokens:${a.totalTokens||0} err:${a.errors||0}`));
-        }
-      }, 5 * 60 * 1000);
+      setInterval(
+        () => {
+          const status = orchestrator.getStatus();
+          for (const a of status.agents) {
+            const name = (a.name || '').padEnd(20);
+            console.log(
+              chalk.gray(
+                `  [${name}] runs:${a.runs || 0} claude:${a.claudeCalls || 0} tokens:${a.totalTokens || 0} err:${a.errors || 0}`,
+              ),
+            );
+          }
+        },
+        5 * 60 * 1000,
+      );
 
       const shutdown = () => {
         orchestrator.stop();
@@ -254,12 +309,16 @@ program
 program
   .command('backtest')
   .description('Run backtest on historical data')
-  .option('-s, --strategy <name>', 'Strategy: screener, momentum, meanreversion', 'screener')
+  .option(
+    '-s, --strategy <name>',
+    'Strategy: screener, momentum, meanreversion',
+    'screener',
+  )
   .option('-d, --days <number>', 'Lookback days', '90')
   .option('--symbols <list>', 'Comma-separated symbols (default: top 10 F&O)')
   .option('--start <date>', 'Start date (YYYY-MM-DD)')
   .option('--end <date>', 'End date (YYYY-MM-DD)')
-  .action(async (opts) => {
+  .action(async opts => {
     try {
       getDb();
       const { runBacktest } = await import('./backtesting/engine.js');
@@ -268,7 +327,9 @@ program
 
       const days = parseInt(opts.days, 10);
       const end = opts.end || new Date().toISOString().slice(0, 10);
-      const start = opts.start || new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+      const start =
+        opts.start ||
+        new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
       const symbols = opts.symbols
         ? opts.symbols.split(',').map(s => s.trim().toUpperCase())
         : FNO_STOCKS.slice(0, 10).map(s => s.symbol);
@@ -289,14 +350,24 @@ program
 
       console.log(chalk.bold.white('\n  ═══ Backtest Results ═══\n'));
       console.log(`  Trades:        ${m.totalTrades}`);
-      console.log(`  Win Rate:      ${chalk[m.winRate >= 50 ? 'green' : 'red'](m.winRate + '%')}`);
-      console.log(`  Total P&L:     ${chalk[m.totalPnl >= 0 ? 'green' : 'red'](formatCurrency(m.totalPnl))}`);
-      console.log(`  Return:        ${chalk[m.totalReturnPct >= 0 ? 'green' : 'red'](m.totalReturnPct + '%')}`);
+      console.log(
+        `  Win Rate:      ${chalk[m.winRate >= 50 ? 'green' : 'red'](m.winRate + '%')}`,
+      );
+      console.log(
+        `  Total P&L:     ${chalk[m.totalPnl >= 0 ? 'green' : 'red'](formatCurrency(m.totalPnl))}`,
+      );
+      console.log(
+        `  Return:        ${chalk[m.totalReturnPct >= 0 ? 'green' : 'red'](m.totalReturnPct + '%')}`,
+      );
       console.log(`  Profit Factor: ${m.profitFactor}`);
       console.log(`  Max Drawdown:  ${chalk.red(m.maxDrawdown + '%')}`);
       console.log(`  Sharpe Ratio:  ${m.sharpeRatio}`);
-      console.log(`  Best Trade:    ${chalk.green(formatCurrency(m.bestTrade))}`);
-      console.log(`  Worst Trade:   ${chalk.red(formatCurrency(m.worstTrade))}`);
+      console.log(
+        `  Best Trade:    ${chalk.green(formatCurrency(m.bestTrade))}`,
+      );
+      console.log(
+        `  Worst Trade:   ${chalk.red(formatCurrency(m.worstTrade))}`,
+      );
       console.log(`  Avg Hold:      ${m.avgHoldingDays} days`);
       console.log(chalk.gray(`\n  Saved: ${filepath}\n`));
     } catch (err) {
@@ -313,7 +384,26 @@ program
     try {
       getDb(); // Initialize DB
 
-      displayHeader('Tradease Daemon', 'Starting all schedulers and monitors...');
+      // Load persisted config (email, telegram, trading)
+      loadPersistedConfig();
+      const emailCfg = getConfigSection('email');
+      if (emailCfg) configureEmail(emailCfg);
+      const tgCfg = getConfigSection('telegram');
+      if (tgCfg) configureTelegram(tgCfg.token, tgCfg.chatId);
+      const tradingCfg = getConfigSection('trading');
+      if (tradingCfg) {
+        Object.assign(TRADING, tradingCfg);
+        if (tradingCfg.RISK_REWARD)
+          Object.assign(TRADING.RISK_REWARD, tradingCfg.RISK_REWARD);
+        logger.info(
+          `[daemon] Loaded persisted trading config: MAX_POSITIONS=${TRADING.MAX_POSITIONS}`,
+        );
+      }
+
+      displayHeader(
+        'Tradease Daemon',
+        'Starting all schedulers and monitors...',
+      );
 
       // Clean old log files on startup
       cleanOldLogs(30);
@@ -329,6 +419,15 @@ program
           logger.info('[daemon] Market open check...');
           const indexData = await checkIndexHealth();
           displayMarketPulse(indexData);
+          // Morning briefing email
+          try {
+            const p = getPortfolioSummary();
+            notifyMorningSummary({
+              openPositions: p.trades,
+              capital: p.netWorth,
+              availableCapital: p.availableCapital,
+            });
+          } catch {}
         },
         tradeExecution: async () => {
           logger.info('[daemon] Trade execution window...');
@@ -366,10 +465,14 @@ program
               try {
                 const quote = await getQuote(t.symbol);
                 exitPrice = quote.price;
-              } catch { /* use last known */ }
+              } catch {
+                /* use last known */
+              }
               exitTrade(t.id, exitPrice, 'End-of-day wind-down');
             } catch (err) {
-              logger.error(`[daemon] Wind-down exit failed for ${t.symbol}: ${err.message}`);
+              logger.error(
+                `[daemon] Wind-down exit failed for ${t.symbol}: ${err.message}`,
+              );
             }
           }
         },
@@ -383,17 +486,39 @@ program
           }
           // Auto-journal closed trades
           try {
-            const { autoJournalRecentTrades } = await import('./trading/journal.js');
+            const { autoJournalRecentTrades } =
+              await import('./trading/journal.js');
             const journaled = autoJournalRecentTrades();
-            if (journaled > 0) logger.info(`[daemon] Auto-journaled ${journaled} trade(s)`);
+            if (journaled > 0)
+              logger.info(`[daemon] Auto-journaled ${journaled} trade(s)`);
           } catch (err) {
             logger.error(`[daemon] autoJournal failed: ${err.message}`);
           }
           const portfolio = getPortfolioSummary();
           const stats = getPerformanceStats(30);
-          logger.info(`[daemon] Capital: ${formatCurrency(portfolio.totalCapital)} | Unrealized: ${formatCurrency(portfolio.unrealizedPnl)}`);
-          logger.info(`[daemon] 30d stats: ${stats.totalTrades} trades | Win: ${stats.winRate}% | P&L: ${formatCurrency(stats.totalPnl)}`);
-          notifyDailySummary(stats.totalPnl || 0, stats.winRate || 0, stats.totalTrades || 0);
+          logger.info(
+            `[daemon] Capital: ${formatCurrency(portfolio.totalCapital)} | Unrealized: ${formatCurrency(portfolio.unrealizedPnl)}`,
+          );
+          logger.info(
+            `[daemon] 30d stats: ${stats.totalTrades} trades | Win: ${stats.winRate}% | P&L: ${formatCurrency(stats.totalPnl)}`,
+          );
+          const winners = Math.round(
+            ((stats.winRate || 0) / 100) * (stats.totalTrades || 0),
+          );
+          const losers = (stats.totalTrades || 0) - winners;
+          notifyDailySummary(
+            stats.totalPnl || 0,
+            stats.winRate || 0,
+            stats.totalTrades || 0,
+            portfolio.netWorth,
+            {
+              winners,
+              losers,
+              realizedPnl: portfolio.realizedPnl || 0,
+              unrealizedPnl: portfolio.unrealizedPnl || 0,
+              openPositions: portfolio.openPositions || 0,
+            },
+          );
         },
       };
 
@@ -406,20 +531,33 @@ program
       listeners.start();
 
       // Start autonomous agents
-      const { AgentOrchestrator, setOrchestrator } = await import('./agents/orchestrator.js');
+      const { AgentOrchestrator, setOrchestrator } =
+        await import('./agents/orchestrator.js');
       const agentOrchestrator = new AgentOrchestrator();
       setOrchestrator(agentOrchestrator);
       await agentOrchestrator.start();
 
       // Log schedule summary
       console.log(chalk.bold.white('\n  Schedule:'));
-      console.log(chalk.gray(`    Pre-Market Scan:    ${SCHEDULE.PRE_MARKET_SCAN}`));
-      console.log(chalk.gray(`    Market Open Check:  ${SCHEDULE.MARKET_OPEN_CHECK}`));
-      console.log(chalk.gray(`    Trade Execution:    ${SCHEDULE.TRADE_EXECUTION}`));
-      console.log(chalk.gray(`    Market Pulse:       ${SCHEDULE.MARKET_PULSE}`));
-      console.log(chalk.gray(`    Position Monitor:   ${SCHEDULE.POSITION_MONITOR}`));
+      console.log(
+        chalk.gray(`    Pre-Market Scan:    ${SCHEDULE.PRE_MARKET_SCAN}`),
+      );
+      console.log(
+        chalk.gray(`    Market Open Check:  ${SCHEDULE.MARKET_OPEN_CHECK}`),
+      );
+      console.log(
+        chalk.gray(`    Trade Execution:    ${SCHEDULE.TRADE_EXECUTION}`),
+      );
+      console.log(
+        chalk.gray(`    Market Pulse:       ${SCHEDULE.MARKET_PULSE}`),
+      );
+      console.log(
+        chalk.gray(`    Position Monitor:   ${SCHEDULE.POSITION_MONITOR}`),
+      );
       console.log(chalk.gray(`    Wind Down:          ${SCHEDULE.WIND_DOWN}`));
-      console.log(chalk.gray(`    Post Market:        ${SCHEDULE.POST_MARKET}`));
+      console.log(
+        chalk.gray(`    Post Market:        ${SCHEDULE.POST_MARKET}`),
+      );
       console.log('');
       console.log(chalk.bold.white('  Agents:'));
       console.log(chalk.cyan('    News Sentinel      — every 5 min'));
@@ -433,7 +571,7 @@ program
       logger.info('[daemon] All schedulers and monitors started.');
 
       // Graceful shutdown
-      const shutdown = (signal) => {
+      const shutdown = signal => {
         logger.info(`[daemon] Received ${signal}. Shutting down...`);
         scheduler.stop();
         listeners.stop();
@@ -446,7 +584,6 @@ program
 
       process.on('SIGINT', () => shutdown('SIGINT'));
       process.on('SIGTERM', () => shutdown('SIGTERM'));
-
     } catch (err) {
       logger.error(`Daemon failed: ${err.message}`);
       closeDb();

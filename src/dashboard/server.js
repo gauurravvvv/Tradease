@@ -2,23 +2,45 @@ import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { getDb } from '../db/sqlite.js';
-import { getOpenTrades, getTradeHistory, enterTrade, exitTrade, partialExit } from '../trading/manager.js';
-import { getPortfolioSummary, getPerformanceStats, getEquityCurve } from '../trading/portfolio.js';
-import { calculateStopLoss, calculateTargets, calculatePositionSize, validateTrade } from '../trading/risk.js';
+import {
+  getOpenTrades,
+  getTradeHistory,
+  enterTrade,
+  exitTrade,
+  partialExit,
+} from '../trading/manager.js';
+import {
+  getPortfolioSummary,
+  getPerformanceStats,
+  getEquityCurve,
+} from '../trading/portfolio.js';
+import {
+  calculateStopLoss,
+  calculateTargets,
+  calculatePositionSize,
+  validateTrade,
+} from '../trading/risk.js';
 import { checkIndexHealth } from '../listeners/index-monitor.js';
 import { getStockNews, fetchAllNews } from '../data/news.js';
-import { scoreSentiment, classifySentiment } from '../listeners/news-monitor.js';
+import {
+  scoreSentiment,
+  classifySentiment,
+} from '../listeners/news-monitor.js';
 import { getGlobalCues } from '../data/global-cues.js';
 import { getFiiDiiData } from '../data/fii-dii.js';
 import { getSectorStrength } from '../analysis/sectors.js';
 import { screenStocks } from '../analysis/screener.js';
 import { getQuote, getHistorical } from '../data/market.js';
 import YahooFinance from 'yahoo-finance2';
-import { DATA } from '../config/settings.js';
+import { DATA, TRADING } from '../config/settings.js';
 import { FNO_STOCKS } from '../data/fno-stocks.js';
 import { analyzeTechnicals, computeATR } from '../analysis/technicals.js';
 import { logger } from '../utils/logger.js';
-import { getOrchestrator, setOrchestrator, AgentOrchestrator } from '../agents/orchestrator.js';
+import {
+  getOrchestrator,
+  setOrchestrator,
+  AgentOrchestrator,
+} from '../agents/orchestrator.js';
 
 // Cache for expensive operations
 const screenerCache = { data: null, ts: 0 };
@@ -43,6 +65,29 @@ const __dirname = path.dirname(__filename);
  */
 export function startDashboard(port = 3777) {
   const app = express();
+
+  // Load persisted config (email, telegram, trading) on dashboard start
+  import('../config/persist.js')
+    .then(({ loadPersistedConfig, getConfigSection }) => {
+      loadPersistedConfig();
+      const emailCfg = getConfigSection('email');
+      if (emailCfg)
+        import('../utils/emailer.js').then(({ configureEmail }) =>
+          configureEmail(emailCfg),
+        );
+      const tgCfg = getConfigSection('telegram');
+      if (tgCfg)
+        import('../utils/telegram.js').then(({ configureTelegram }) =>
+          configureTelegram(tgCfg.token, tgCfg.chatId),
+        );
+      const tradingCfg = getConfigSection('trading');
+      if (tradingCfg) {
+        Object.assign(TRADING, tradingCfg);
+        if (tradingCfg.RISK_REWARD)
+          Object.assign(TRADING.RISK_REWARD, tradingCfg.RISK_REWARD);
+      }
+    })
+    .catch(() => {});
 
   // Middleware
   app.use(express.json());
@@ -69,10 +114,13 @@ export function startDashboard(port = 3777) {
       // Compute live P&L for each
       const enriched = trades.map(t => {
         const currentPrice = t.current_price || t.entry_price;
-        const pnl = t.type === 'CALL'
-          ? (currentPrice - t.entry_price) * t.lot_size * t.quantity
-          : (t.entry_price - currentPrice) * t.lot_size * t.quantity;
-        const rawPct = t.entry_price ? ((currentPrice - t.entry_price) / t.entry_price * 100) : 0;
+        const pnl =
+          t.type === 'CALL'
+            ? (currentPrice - t.entry_price) * t.lot_size * t.quantity
+            : (t.entry_price - currentPrice) * t.lot_size * t.quantity;
+        const rawPct = t.entry_price
+          ? ((currentPrice - t.entry_price) / t.entry_price) * 100
+          : 0;
         const pnlPct = t.type === 'PUT' ? -rawPct : rawPct;
         return { ...t, live_pnl: pnl, live_pnl_pct: pnlPct };
       });
@@ -119,16 +167,19 @@ export function startDashboard(port = 3777) {
   // Full market status
   app.get('/api/market-status', async (req, res) => {
     try {
-      const [indexHealth, globalCues, fiiDii, sectors] = await Promise.allSettled([
-        checkIndexHealth(),
-        getGlobalCues(),
-        getFiiDiiData(),
-        getSectorStrength(),
-      ]);
+      const [indexHealth, globalCues, fiiDii, sectors] =
+        await Promise.allSettled([
+          checkIndexHealth(),
+          getGlobalCues(),
+          getFiiDiiData(),
+          getSectorStrength(),
+        ]);
 
       // Market session
       const now = new Date();
-      const ist = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+      const ist = new Date(
+        now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }),
+      );
       const day = ist.getDay();
       const mins = ist.getHours() * 60 + ist.getMinutes();
       let session;
@@ -165,7 +216,7 @@ export function startDashboard(port = 3777) {
       }
 
       const results = await Promise.all(
-        symbols.map(async (symbol) => {
+        symbols.map(async symbol => {
           try {
             const articles = await getStockNews(symbol);
             const scored = articles.map(a => ({
@@ -181,12 +232,20 @@ export function startDashboard(port = 3777) {
               newsCount: articles.length,
               totalScore,
               sentiment: classifySentiment(totalScore),
-              headlines: scored.sort((a, b) => Math.abs(b.score) - Math.abs(a.score)).slice(0, 5),
+              headlines: scored
+                .sort((a, b) => Math.abs(b.score) - Math.abs(a.score))
+                .slice(0, 5),
             };
           } catch {
-            return { symbol, newsCount: 0, totalScore: 0, sentiment: 'neutral', headlines: [] };
+            return {
+              symbol,
+              newsCount: 0,
+              totalScore: 0,
+              sentiment: 'neutral',
+              headlines: [],
+            };
           }
-        })
+        }),
       );
 
       res.json(results);
@@ -199,7 +258,7 @@ export function startDashboard(port = 3777) {
   app.get('/api/top-picks', async (req, res) => {
     try {
       const now = Date.now();
-      if (screenerCache.data && (now - screenerCache.ts) < SCREENER_TTL) {
+      if (screenerCache.data && now - screenerCache.ts < SCREENER_TTL) {
         return res.json(screenerCache.data);
       }
 
@@ -244,7 +303,7 @@ export function startDashboard(port = 3777) {
 
       const symbols = picks.map(p => p.symbol);
       const results = await Promise.all(
-        symbols.map(async (symbol) => {
+        symbols.map(async symbol => {
           try {
             const articles = await getStockNews(symbol);
             const scored = articles.map(a => ({
@@ -260,12 +319,20 @@ export function startDashboard(port = 3777) {
               newsCount: articles.length,
               totalScore,
               sentiment: classifySentiment(totalScore),
-              headlines: scored.sort((a, b) => Math.abs(b.score) - Math.abs(a.score)).slice(0, 5),
+              headlines: scored
+                .sort((a, b) => Math.abs(b.score) - Math.abs(a.score))
+                .slice(0, 5),
             };
           } catch {
-            return { symbol, newsCount: 0, totalScore: 0, sentiment: 'neutral', headlines: [] };
+            return {
+              symbol,
+              newsCount: 0,
+              totalScore: 0,
+              sentiment: 'neutral',
+              headlines: [],
+            };
           }
-        })
+        }),
       );
       res.json(results);
     } catch (err) {
@@ -289,10 +356,13 @@ export function startDashboard(port = 3777) {
       // Enrich trades with P&L
       const enrichedTrades = trades.map(t => {
         const cp = t.current_price || t.entry_price;
-        const pnl = t.type === 'CALL'
-          ? (cp - t.entry_price) * t.lot_size * t.quantity
-          : (t.entry_price - cp) * t.lot_size * t.quantity;
-        const rawPct = t.entry_price ? ((cp - t.entry_price) / t.entry_price * 100) : 0;
+        const pnl =
+          t.type === 'CALL'
+            ? (cp - t.entry_price) * t.lot_size * t.quantity
+            : (t.entry_price - cp) * t.lot_size * t.quantity;
+        const rawPct = t.entry_price
+          ? ((cp - t.entry_price) / t.entry_price) * 100
+          : 0;
         const pnlPct = t.type === 'PUT' ? -rawPct : rawPct;
         return { ...t, live_pnl: pnl, live_pnl_pct: pnlPct };
       });
@@ -336,11 +406,27 @@ export function startDashboard(port = 3777) {
         const callTargets = calculateTargets(quote.price, callSL, 'CALL');
         const putTargets = calculateTargets(quote.price, putSL, 'PUT');
         const portfolio = getPortfolioSummary();
-        const posSize = calculatePositionSize(portfolio.availableCapital, quote.price, 1);
+        const posSize = calculatePositionSize(
+          portfolio.availableCapital,
+          quote.price,
+          1,
+        );
 
         suggestions = {
-          call: { entry: quote.price, stopLoss: callSL, target1: callTargets.target1, target2: callTargets.target2, riskPerLot: callTargets.riskPerLot },
-          put: { entry: quote.price, stopLoss: putSL, target1: putTargets.target1, target2: putTargets.target2, riskPerLot: putTargets.riskPerLot },
+          call: {
+            entry: quote.price,
+            stopLoss: callSL,
+            target1: callTargets.target1,
+            target2: callTargets.target2,
+            riskPerLot: callTargets.riskPerLot,
+          },
+          put: {
+            entry: quote.price,
+            stopLoss: putSL,
+            target1: putTargets.target1,
+            target2: putTargets.target2,
+            riskPerLot: putTargets.riskPerLot,
+          },
           positionSize: posSize,
           atr,
         };
@@ -372,7 +458,10 @@ export function startDashboard(port = 3777) {
       }
 
       const scoredNews = articles.map(a => ({
-        title: a.title, link: a.link, source: a.source, pubDate: a.pubDate,
+        title: a.title,
+        link: a.link,
+        source: a.source,
+        pubDate: a.pubDate,
         score: scoreSentiment(a),
       }));
       const newsScore = scoredNews.reduce((s, a) => s + a.score, 0);
@@ -385,8 +474,20 @@ export function startDashboard(port = 3777) {
         const portfolio = getPortfolioSummary();
 
         suggestions = {
-          call: { entry: quote.price, stopLoss: callSL, target1: callTargets.target1, target2: callTargets.target2, riskPerLot: callTargets.riskPerLot },
-          put: { entry: quote.price, stopLoss: putSL, target1: putTargets.target1, target2: putTargets.target2, riskPerLot: putTargets.riskPerLot },
+          call: {
+            entry: quote.price,
+            stopLoss: callSL,
+            target1: callTargets.target1,
+            target2: callTargets.target2,
+            riskPerLot: callTargets.riskPerLot,
+          },
+          put: {
+            entry: quote.price,
+            stopLoss: putSL,
+            target1: putTargets.target1,
+            target2: putTargets.target2,
+            riskPerLot: putTargets.riskPerLot,
+          },
           atr,
           availableCapital: portfolio.availableCapital,
           openPositions: portfolio.openPositions,
@@ -394,8 +495,15 @@ export function startDashboard(port = 3777) {
       }
 
       res.json({
-        symbol, quote, technicals, suggestions,
-        news: { articles: scoredNews.slice(0, 8), totalScore: newsScore, sentiment: classifySentiment(newsScore) },
+        symbol,
+        quote,
+        technicals,
+        suggestions,
+        news: {
+          articles: scoredNews.slice(0, 8),
+          totalScore: newsScore,
+          sentiment: classifySentiment(newsScore),
+        },
       });
     } catch (err) {
       res.status(500).json({ error: err.message });
@@ -406,19 +514,45 @@ export function startDashboard(port = 3777) {
   app.post('/api/trades/enter', (req, res) => {
     try {
       getDb();
-      const { symbol, type, entryPrice, premium, lotSize, stopLoss, target1, target2, confidence, reason, expiry, strike } = req.body;
+      const {
+        symbol,
+        type,
+        entryPrice,
+        premium,
+        lotSize,
+        stopLoss,
+        target1,
+        target2,
+        confidence,
+        reason,
+        expiry,
+        strike,
+      } = req.body;
       if (!symbol || !type || !entryPrice || !lotSize || !stopLoss) {
-        return res.status(400).json({ error: 'Missing required fields: symbol, type, entryPrice, lotSize, stopLoss' });
+        return res
+          .status(400)
+          .json({
+            error:
+              'Missing required fields: symbol, type, entryPrice, lotSize, stopLoss',
+          });
       }
       const trade = enterTrade({
-        symbol: symbol.toUpperCase(), type: type.toUpperCase(),
-        entryPrice: Number(entryPrice), premium: Number(premium || entryPrice * 0.02),
-        lotSize: Number(lotSize), stopLoss: Number(stopLoss),
-        target1: target1 ? Number(target1) : null, target2: target2 ? Number(target2) : null,
-        confidence: Number(confidence || 70), reason: reason || 'Manual UI entry',
-        expiry, strike: strike ? Number(strike) : undefined,
+        symbol: symbol.toUpperCase(),
+        type: type.toUpperCase(),
+        entryPrice: Number(entryPrice),
+        premium: Number(premium || entryPrice * 0.02),
+        lotSize: Number(lotSize),
+        stopLoss: Number(stopLoss),
+        target1: target1 ? Number(target1) : null,
+        target2: target2 ? Number(target2) : null,
+        confidence: Number(confidence || 70),
+        reason: reason || 'Manual UI entry',
+        expiry,
+        strike: strike ? Number(strike) : undefined,
       });
-      logger.trade(`[dashboard] Trade entered via UI: ${symbol} ${type} @ ${entryPrice}`);
+      logger.trade(
+        `[dashboard] Trade entered via UI: ${symbol} ${type} @ ${entryPrice}`,
+      );
       res.json({ ok: true, trade });
     } catch (err) {
       res.status(500).json({ error: err.message });
@@ -436,9 +570,14 @@ export function startDashboard(port = 3777) {
       if (!trade) return res.status(404).json({ error: 'Trade not found' });
 
       let exitPrice = trade.current_price || trade.entry_price;
-      try { const q = await getQuote(trade.symbol); exitPrice = q.price; } catch {}
+      try {
+        const q = await getQuote(trade.symbol);
+        exitPrice = q.price;
+      } catch {}
       exitTrade(tradeId, exitPrice, reason || 'Manual UI exit');
-      logger.trade(`[dashboard] Trade exited via UI: ${trade.symbol} @ ${exitPrice}`);
+      logger.trade(
+        `[dashboard] Trade exited via UI: ${trade.symbol} @ ${exitPrice}`,
+      );
       res.json({ ok: true, exitPrice });
     } catch (err) {
       res.status(500).json({ error: err.message });
@@ -456,10 +595,20 @@ export function startDashboard(port = 3777) {
       if (!trade) return res.status(404).json({ error: 'Trade not found' });
 
       let exitPrice = trade.current_price || trade.entry_price;
-      try { const q = await getQuote(trade.symbol); exitPrice = q.price; } catch {}
+      try {
+        const q = await getQuote(trade.symbol);
+        exitPrice = q.price;
+      } catch {}
       const pct = Number(percentage || 0.5);
-      partialExit(tradeId, pct, exitPrice, reason || `Partial exit ${Math.round(pct * 100)}% via UI`);
-      logger.trade(`[dashboard] Partial exit via UI: ${trade.symbol} ${Math.round(pct * 100)}% @ ${exitPrice}`);
+      partialExit(
+        tradeId,
+        pct,
+        exitPrice,
+        reason || `Partial exit ${Math.round(pct * 100)}% via UI`,
+      );
+      logger.trade(
+        `[dashboard] Partial exit via UI: ${trade.symbol} ${Math.round(pct * 100)}% @ ${exitPrice}`,
+      );
       res.json({ ok: true, exitPrice, percentage: pct });
     } catch (err) {
       res.status(500).json({ error: err.message });
@@ -471,13 +620,21 @@ export function startDashboard(port = 3777) {
     try {
       const screened = await screenStocks();
       const picks = screened.slice(0, 15).map(s => ({
-        symbol: s.symbol, name: s.name, sector: s.sector,
-        price: s.price, changePct: s.changePct, volume: s.volume,
-        score: s.score, recommendation: s.recommendation,
+        symbol: s.symbol,
+        name: s.name,
+        sector: s.sector,
+        price: s.price,
+        changePct: s.changePct,
+        volume: s.volume,
+        score: s.score,
+        recommendation: s.recommendation,
         lotSize: s.lotSize,
-        rsi: s.technicals?.rsi?.value, macdTrend: s.technicals?.macd?.trend,
-        atr: s.technicals?.atr?.value, volumeRatio: s.technicals?.volume?.ratio,
-        sectorRank: s.sectorRank, sectorTrend: s.sectorTrend,
+        rsi: s.technicals?.rsi?.value,
+        macdTrend: s.technicals?.macd?.trend,
+        atr: s.technicals?.atr?.value,
+        volumeRatio: s.technicals?.volume?.ratio,
+        sectorRank: s.sectorRank,
+        sectorTrend: s.sectorTrend,
       }));
       screenerCache.data = picks;
       screenerCache.ts = Date.now();
@@ -494,15 +651,20 @@ export function startDashboard(port = 3777) {
       const symbol = req.params.symbol.toUpperCase();
       const now = Date.now();
       const cached = chartCache.get(symbol);
-      if (cached && (now - cached.ts) < CHART_TTL) {
+      if (cached && now - cached.ts < CHART_TTL) {
         return res.json(cached.data);
       }
 
-      const ySymbol = symbol === 'NIFTY' ? '^NSEI'
-        : symbol === 'BANKNIFTY' ? '^NSEBANK'
-        : `${symbol}${DATA.YAHOO_SUFFIX}`;
+      const ySymbol =
+        symbol === 'NIFTY'
+          ? '^NSEI'
+          : symbol === 'BANKNIFTY'
+            ? '^NSEBANK'
+            : `${symbol}${DATA.YAHOO_SUFFIX}`;
 
-      const yahooFinance = new YahooFinance({ suppressNotices: ['yahooSurvey'] });
+      const yahooFinance = new YahooFinance({
+        suppressNotices: ['yahooSurvey'],
+      });
       const result = await yahooFinance.chart(ySymbol, {
         period1: new Date(new Date().setHours(0, 0, 0, 0)),
         interval: '5m',
@@ -524,14 +686,22 @@ export function startDashboard(port = 3777) {
         .map(q => ({
           time: Math.floor(new Date(q.date).getTime() / 1000),
           value: q.volume,
-          color: q.close >= q.open ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)',
+          color:
+            q.close >= q.open ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)',
         }));
 
       const data = { symbol, candles, volume };
       chartCache.set(symbol, { data, ts: now });
       res.json(data);
     } catch (err) {
-      res.status(500).json({ error: err.message, symbol: req.params.symbol, candles: [], volume: [] });
+      res
+        .status(500)
+        .json({
+          error: err.message,
+          symbol: req.params.symbol,
+          candles: [],
+          volume: [],
+        });
     }
   });
 
@@ -564,74 +734,104 @@ export function startDashboard(port = 3777) {
         symbol: t.symbol,
         sector: sectorMap[t.symbol] || 'Other',
         capital: t.capital_used,
-        pct: totalCapital > 0 ? Math.round((t.capital_used / totalCapital) * 10000) / 100 : 0,
+        pct:
+          totalCapital > 0
+            ? Math.round((t.capital_used / totalCapital) * 10000) / 100
+            : 0,
       }));
 
-      const availablePct = totalCapital > 0
-        ? Math.round((portfolio.availableCapital / totalCapital) * 10000) / 100
-        : 100;
+      const availablePct =
+        totalCapital > 0
+          ? Math.round((portfolio.availableCapital / totalCapital) * 10000) /
+            100
+          : 100;
 
       // Sector exposure (aggregate by sector)
       const sectorTotals = {};
       for (const p of positions) {
         sectorTotals[p.sector] = (sectorTotals[p.sector] || 0) + p.capital;
       }
-      const sectorExposure = Object.entries(sectorTotals).map(([sector, capital]) => ({
-        sector,
-        capital,
-        pct: totalCapital > 0 ? Math.round((capital / totalCapital) * 10000) / 100 : 0,
-      }));
+      const sectorExposure = Object.entries(sectorTotals).map(
+        ([sector, capital]) => ({
+          sector,
+          capital,
+          pct:
+            totalCapital > 0
+              ? Math.round((capital / totalCapital) * 10000) / 100
+              : 0,
+        }),
+      );
 
       // Drawdown from daily_summary
       const db = getDb();
-      const summaries = db.prepare(
-        'SELECT ending_capital FROM daily_summary WHERE ending_capital IS NOT NULL ORDER BY date ASC'
-      ).all();
+      const summaries = db
+        .prepare(
+          'SELECT ending_capital FROM daily_summary WHERE ending_capital IS NOT NULL ORDER BY date ASC',
+        )
+        .all();
       let peakCapital = totalCapital;
       let maxDrawdownPct = 0;
       for (const row of summaries) {
         if (row.ending_capital > peakCapital) peakCapital = row.ending_capital;
-        const dd = peakCapital > 0 ? ((peakCapital - row.ending_capital) / peakCapital) * 100 : 0;
+        const dd =
+          peakCapital > 0
+            ? ((peakCapital - row.ending_capital) / peakCapital) * 100
+            : 0;
         if (dd > maxDrawdownPct) maxDrawdownPct = dd;
       }
       const currentCapitalVal = totalCapital + portfolio.unrealizedPnl;
-      const currentDrawdownPct = peakCapital > 0 ? Math.max(0, ((peakCapital - currentCapitalVal) / peakCapital) * 100) : 0;
+      const currentDrawdownPct =
+        peakCapital > 0
+          ? Math.max(0, ((peakCapital - currentCapitalVal) / peakCapital) * 100)
+          : 0;
 
       // Risk metrics
       const totalHeat = trades.reduce((s, t) => s + t.capital_used, 0);
 
       const worstCaseLoss = trades.reduce((s, t) => {
         if (!t.stop_loss) return s;
-        const loss = t.type === 'CALL'
-          ? (t.entry_price - t.stop_loss) * t.lot_size * t.quantity
-          : (t.stop_loss - t.entry_price) * t.lot_size * t.quantity;
+        const loss =
+          t.type === 'CALL'
+            ? (t.entry_price - t.stop_loss) * t.lot_size * t.quantity
+            : (t.stop_loss - t.entry_price) * t.lot_size * t.quantity;
         return s - Math.abs(loss);
       }, 0);
 
-      const avgRiskReward = trades.length > 0
-        ? trades.reduce((s, t) => {
-            if (!t.stop_loss || !t.target1) return s;
-            const risk = Math.abs(t.entry_price - t.stop_loss);
-            const reward = Math.abs(t.target1 - t.entry_price);
-            return s + (risk > 0 ? reward / risk : 0);
-          }, 0) / trades.length
-        : 0;
+      const avgRiskReward =
+        trades.length > 0
+          ? trades.reduce((s, t) => {
+              if (!t.stop_loss || !t.target1) return s;
+              const risk = Math.abs(t.entry_price - t.stop_loss);
+              const reward = Math.abs(t.target1 - t.entry_price);
+              return s + (risk > 0 ? reward / risk : 0);
+            }, 0) / trades.length
+          : 0;
 
       // Win/loss streak
-      const recent = db.prepare(
-        `SELECT pnl FROM trades WHERE status IN ('CLOSED','STOPPED') ORDER BY exited_at DESC LIMIT 20`
-      ).all();
-      let winStreak = 0, lossStreak = 0;
+      const recent = db
+        .prepare(
+          `SELECT pnl FROM trades WHERE status IN ('CLOSED','STOPPED') ORDER BY exited_at DESC LIMIT 20`,
+        )
+        .all();
+      let winStreak = 0,
+        lossStreak = 0;
       for (const t of recent) {
-        if ((t.pnl || 0) > 0) { winStreak++; if (lossStreak > 0) break; }
-        else if ((t.pnl || 0) < 0) { lossStreak++; if (winStreak > 0) break; }
-        else break;
+        if ((t.pnl || 0) > 0) {
+          winStreak++;
+          if (lossStreak > 0) break;
+        } else if ((t.pnl || 0) < 0) {
+          lossStreak++;
+          if (winStreak > 0) break;
+        } else break;
       }
 
       res.json({
         allocation: {
           positions,
-          available: { capital: Math.round(portfolio.availableCapital * 100) / 100, pct: availablePct },
+          available: {
+            capital: Math.round(portfolio.availableCapital * 100) / 100,
+            pct: availablePct,
+          },
         },
         sectorExposure,
         drawdown: {
@@ -656,7 +856,8 @@ export function startDashboard(port = 3777) {
   // Backtest results
   app.get('/api/backtest/latest', async (req, res) => {
     try {
-      const { loadLatestBacktest, listBacktests } = await import('../backtesting/report.js');
+      const { loadLatestBacktest, listBacktests } =
+        await import('../backtesting/report.js');
       const latest = loadLatestBacktest();
       const all = listBacktests();
       res.json({ latest, history: all });
@@ -676,15 +877,28 @@ export function startDashboard(port = 3777) {
       const { saveBacktestResult } = await import('../backtesting/report.js');
       const { FNO_STOCKS } = await import('../data/fno-stocks.js');
 
-      const { strategy = 'screener', days = 90, symbolCount = 5 } = req.body || {};
+      const {
+        strategy = 'screener',
+        days = 90,
+        symbolCount = 5,
+      } = req.body || {};
       const end = new Date().toISOString().slice(0, 10);
-      const start = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+      const start = new Date(Date.now() - days * 86400000)
+        .toISOString()
+        .slice(0, 10);
       const count = Math.min(Math.max(1, parseInt(symbolCount) || 5), 15);
       const symbols = FNO_STOCKS.slice(0, count).map(s => s.symbol);
 
-      logger.info(`[backtest] Dashboard request: ${strategy}, ${symbols.length} symbols, ${start} → ${end}`);
+      logger.info(
+        `[backtest] Dashboard request: ${strategy}, ${symbols.length} symbols, ${start} → ${end}`,
+      );
 
-      const result = await runBacktest({ strategy, symbols, startDate: start, endDate: end });
+      const result = await runBacktest({
+        strategy,
+        symbols,
+        startDate: start,
+        endDate: end,
+      });
       saveBacktestResult(result);
 
       // Strip equity curve and trade details to reduce response size
@@ -705,17 +919,25 @@ export function startDashboard(port = 3777) {
       getDb();
       const now = Date.now();
       let picks = screenerCache.data;
-      if (!picks || (now - screenerCache.ts) >= SCREENER_TTL) {
+      if (!picks || now - screenerCache.ts >= SCREENER_TTL) {
         const screened = await screenStocks();
         picks = screened.slice(0, 15).map(s => ({
-          symbol: s.symbol, name: s.name, sector: s.sector,
-          price: s.price, changePct: s.changePct, volume: s.volume,
-          score: s.score, recommendation: s.recommendation,
+          symbol: s.symbol,
+          name: s.name,
+          sector: s.sector,
+          price: s.price,
+          changePct: s.changePct,
+          volume: s.volume,
+          score: s.score,
+          recommendation: s.recommendation,
           lotSize: s.lotSize,
-          rsi: s.technicals?.rsi?.value, macdTrend: s.technicals?.macd?.trend,
-          atr: s.technicals?.atr?.value, volumeRatio: s.technicals?.volume?.ratio,
+          rsi: s.technicals?.rsi?.value,
+          macdTrend: s.technicals?.macd?.trend,
+          atr: s.technicals?.atr?.value,
+          volumeRatio: s.technicals?.volume?.ratio,
           overallSignal: s.technicals?.overallSignal,
-          sectorRank: s.sectorRank, sectorTrend: s.sectorTrend,
+          sectorRank: s.sectorRank,
+          sectorTrend: s.sectorTrend,
         }));
         screenerCache.data = picks;
         screenerCache.ts = now;
@@ -725,32 +947,53 @@ export function startDashboard(port = 3777) {
       const portfolio = getPortfolioSummary();
       const openSymbols = new Set(getOpenTrades().map(t => t.symbol));
       const actionable = picks
-        .filter(p => (p.recommendation === 'CALL' || p.recommendation === 'PUT') && !openSymbols.has(p.symbol))
+        .filter(
+          p =>
+            (p.recommendation === 'CALL' || p.recommendation === 'PUT') &&
+            !openSymbols.has(p.symbol),
+        )
         .slice(0, 8)
         .map(p => {
           const atr = p.atr || 0;
           const type = p.recommendation;
           const sl = atr ? calculateStopLoss(p.price, atr, type) : null;
           const targets = sl ? calculateTargets(p.price, sl, type) : null;
-          const posSize = calculatePositionSize(portfolio.availableCapital, p.price, p.lotSize || 1);
+          const posSize = calculatePositionSize(
+            portfolio.availableCapital,
+            p.price,
+            p.lotSize || 1,
+          );
           return {
-            ...p, atr,
+            ...p,
+            atr,
             entry: p.price,
             stopLoss: sl,
             target1: targets?.target1 || null,
             target2: targets?.target2 || null,
             riskPerLot: targets?.riskPerLot || null,
-            riskReward: sl && targets ? Math.abs(targets.target1 - p.price) / Math.abs(p.price - sl) : null,
+            riskReward:
+              sl && targets
+                ? Math.abs(targets.target1 - p.price) / Math.abs(p.price - sl)
+                : null,
             maxLots: posSize.lots,
             capitalRequired: posSize.capitalRequired,
-            canTrade: !openSymbols.has(p.symbol) && portfolio.openPositions < 3 && posSize.lots > 0,
+            canTrade:
+              !openSymbols.has(p.symbol) &&
+              portfolio.openPositions < TRADING.MAX_POSITIONS &&
+              posSize.lots > 0,
           };
         });
 
       res.json({
         recommendations: actionable,
-        portfolio: { available: portfolio.availableCapital, positions: portfolio.openPositions, maxPositions: 3 },
-        scannedAt: screenerCache.ts ? new Date(screenerCache.ts).toISOString() : null,
+        portfolio: {
+          available: portfolio.availableCapital,
+          positions: portfolio.openPositions,
+          maxPositions: TRADING.MAX_POSITIONS,
+        },
+        scannedAt: screenerCache.ts
+          ? new Date(screenerCache.ts).toISOString()
+          : null,
       });
     } catch (err) {
       res.status(500).json({ error: err.message });
@@ -764,8 +1007,17 @@ export function startDashboard(port = 3777) {
       const { symbol, type, capitalRequired, maxLoss } = req.body;
       const portfolio = getPortfolioSummary();
       const result = validateTrade(
-        { symbol, type, capitalRequired: Number(capitalRequired), maxLoss: Number(maxLoss) },
-        { positions: portfolio.trades, capitalUsed: portfolio.capitalInUse, totalCapital: portfolio.totalCapital }
+        {
+          symbol,
+          type,
+          capitalRequired: Number(capitalRequired),
+          maxLoss: Number(maxLoss),
+        },
+        {
+          positions: portfolio.trades,
+          capitalUsed: portfolio.capitalInUse,
+          totalCapital: portfolio.totalCapital,
+        },
       );
       res.json(result);
     } catch (err) {
@@ -809,22 +1061,36 @@ export function startDashboard(port = 3777) {
       if (!orch) {
         // Return DB-based stats even when orchestrator not in this process
         const db = getDb();
-        const agents = ['news-sentinel', 'trade-strategist', 'position-guardian'];
+        const agents = [
+          'news-sentinel',
+          'trade-strategist',
+          'position-guardian',
+        ];
         const status = agents.map(name => {
-          const stats = db.prepare(
-            `SELECT COUNT(*) as runs, SUM(skipped) as skipped, SUM(tokens_in + tokens_out) as tokens
-             FROM agent_logs WHERE agent = ? AND created_at > datetime('now', '+5 hours', '+30 minutes', '-1 hour')`
-          ).get(name);
-          const errors = db.prepare(
-            `SELECT COUNT(*) as count FROM agent_logs WHERE agent = ? AND action = 'error' AND created_at > datetime('now', '+5 hours', '+30 minutes', '-1 hour')`
-          ).get(name);
-          const last = db.prepare(
-            'SELECT action, symbol, details, created_at FROM agent_logs WHERE agent = ? ORDER BY created_at DESC LIMIT 1'
-          ).get(name);
+          const stats = db
+            .prepare(
+              `SELECT COUNT(*) as runs, SUM(skipped) as skipped, SUM(tokens_in + tokens_out) as tokens
+             FROM agent_logs WHERE agent = ? AND created_at > datetime('now', '+5 hours', '+30 minutes', '-1 hour')`,
+            )
+            .get(name);
+          const errors = db
+            .prepare(
+              `SELECT COUNT(*) as count FROM agent_logs WHERE agent = ? AND action = 'error' AND created_at > datetime('now', '+5 hours', '+30 minutes', '-1 hour')`,
+            )
+            .get(name);
+          const last = db
+            .prepare(
+              'SELECT action, symbol, details, created_at FROM agent_logs WHERE agent = ? ORDER BY created_at DESC LIMIT 1',
+            )
+            .get(name);
           return {
-            name, runs: stats?.runs || 0, skipped: stats?.skipped || 0,
-            tokens: stats?.tokens || 0, errors: errors?.count || 0,
-            lastAction: last?.action || 'idle', lastRun: last?.created_at || null,
+            name,
+            runs: stats?.runs || 0,
+            skipped: stats?.skipped || 0,
+            tokens: stats?.tokens || 0,
+            errors: errors?.count || 0,
+            lastAction: last?.action || 'idle',
+            lastRun: last?.created_at || null,
           };
         });
         return res.json({ running: false, agents: status });
@@ -842,7 +1108,9 @@ export function startDashboard(port = 3777) {
     try {
       const db = getDb();
       const limit = parseInt(req.query.limit || '30', 10);
-      const logs = db.prepare('SELECT * FROM agent_logs ORDER BY created_at DESC LIMIT ?').all(limit);
+      const logs = db
+        .prepare('SELECT * FROM agent_logs ORDER BY created_at DESC LIMIT ?')
+        .all(limit);
       res.json(logs);
     } catch (err) {
       res.status(500).json({ error: err.message });
@@ -853,7 +1121,11 @@ export function startDashboard(port = 3777) {
   app.get('/api/agents/signals', (req, res) => {
     try {
       const db = getDb();
-      const signals = db.prepare('SELECT * FROM agent_signals WHERE consumed = 0 ORDER BY created_at DESC').all();
+      const signals = db
+        .prepare(
+          'SELECT * FROM agent_signals WHERE consumed = 0 ORDER BY created_at DESC',
+        )
+        .all();
       res.json(signals);
     } catch (err) {
       res.status(500).json({ error: err.message });
@@ -879,13 +1151,16 @@ export function startDashboard(port = 3777) {
   app.get('/api/live-news', async (req, res) => {
     try {
       const now = Date.now();
-      if (liveCache.news.data && (now - liveCache.news.ts) < 120_000) {
+      if (liveCache.news.data && now - liveCache.news.ts < 120_000) {
         return res.json(liveCache.news.data);
       }
       const articles = await fetchAllNews();
       const scored = articles.slice(0, 30).map(a => ({
-        title: a.title, link: a.link, source: a.source,
-        pubDate: a.pubDate, snippet: a.snippet,
+        title: a.title,
+        link: a.link,
+        source: a.source,
+        pubDate: a.pubDate,
+        snippet: a.snippet,
         score: scoreSentiment(a),
       }));
       liveCache.news.data = scored;
@@ -906,17 +1181,23 @@ export function startDashboard(port = 3777) {
       const symbols = [...new Set(trades.map(t => t.symbol))];
       const quotes = {};
       await Promise.allSettled(
-        symbols.map(async (sym) => {
-          try { const q = await getQuote(sym); quotes[sym] = q.price; } catch {}
-        })
+        symbols.map(async sym => {
+          try {
+            const q = await getQuote(sym);
+            quotes[sym] = q.price;
+          } catch {}
+        }),
       );
 
       const enriched = trades.map(t => {
         const cp = quotes[t.symbol] || t.current_price || t.entry_price;
-        const pnl = t.type === 'CALL'
-          ? (cp - t.entry_price) * t.lot_size * t.quantity
-          : (t.entry_price - cp) * t.lot_size * t.quantity;
-        const rawPct = t.entry_price ? ((cp - t.entry_price) / t.entry_price * 100) : 0;
+        const pnl =
+          t.type === 'CALL'
+            ? (cp - t.entry_price) * t.lot_size * t.quantity
+            : (t.entry_price - cp) * t.lot_size * t.quantity;
+        const rawPct = t.entry_price
+          ? ((cp - t.entry_price) / t.entry_price) * 100
+          : 0;
         const pnlPct = t.type === 'PUT' ? -rawPct : rawPct;
         return { ...t, current_price: cp, live_pnl: pnl, live_pnl_pct: pnlPct };
       });
@@ -932,7 +1213,7 @@ export function startDashboard(port = 3777) {
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
+      Connection: 'keep-alive',
       'X-Accel-Buffering': 'no',
     });
     res.write('data: {"type":"connected"}\n\n');
@@ -949,7 +1230,9 @@ export function startDashboard(port = 3777) {
   function broadcast(eventType, data) {
     const msg = `event: ${eventType}\ndata: ${JSON.stringify(data)}\n\n`;
     for (const client of sseClients) {
-      try { client.write(msg); } catch {}
+      try {
+        client.write(msg);
+      } catch {}
     }
   }
 
@@ -971,24 +1254,49 @@ export function startDashboard(port = 3777) {
           const symbols = [...new Set(trades.map(t => t.symbol))];
           const quotes = {};
           await Promise.allSettled(
-            symbols.map(async (sym) => {
-              try { const q = await getQuote(sym); quotes[sym] = q.price; } catch {}
-            })
+            symbols.map(async sym => {
+              try {
+                const q = await getQuote(sym);
+                quotes[sym] = q.price;
+              } catch {}
+            }),
           );
           // Update DB current_price so portfolio summary uses fresh prices
           const db = getDb();
-          const updateStmt = db.prepare('UPDATE trades SET current_price = ? WHERE id = ? AND status = ?');
-          const updateMany = db.transaction((items) => { for (const { id, cp } of items) updateStmt.run(cp, id, 'OPEN'); });
+          const updateStmt = db.prepare(
+            'UPDATE trades SET current_price = ? WHERE id = ? AND status = ?',
+          );
+          const updateMany = db.transaction(items => {
+            for (const { id, cp } of items) updateStmt.run(cp, id, 'OPEN');
+          });
           const updates = [];
           const enriched = trades.map(t => {
             const cp = quotes[t.symbol] || t.current_price || t.entry_price;
             if (quotes[t.symbol]) updates.push({ id: t.id, cp });
-            const pnl = t.type === 'CALL'
-              ? (cp - t.entry_price) * t.lot_size * t.quantity
-              : (t.entry_price - cp) * t.lot_size * t.quantity;
-            const rawPct = t.entry_price ? ((cp - t.entry_price) / t.entry_price * 100) : 0;
+            const pnl =
+              t.type === 'CALL'
+                ? (cp - t.entry_price) * t.lot_size * t.quantity
+                : (t.entry_price - cp) * t.lot_size * t.quantity;
+            const rawPct = t.entry_price
+              ? ((cp - t.entry_price) / t.entry_price) * 100
+              : 0;
             const pnlPct = t.type === 'PUT' ? -rawPct : rawPct;
-            return { id: t.id, symbol: t.symbol, type: t.type, entry_price: t.entry_price, current_price: cp, stop_loss: t.stop_loss, target1: t.target1, target2: t.target2, t1_hit: t.t1_hit, t2_hit: t.t2_hit, quantity: t.quantity, capital_used: t.capital_used, live_pnl: pnl, live_pnl_pct: pnlPct };
+            return {
+              id: t.id,
+              symbol: t.symbol,
+              type: t.type,
+              entry_price: t.entry_price,
+              current_price: cp,
+              stop_loss: t.stop_loss,
+              target1: t.target1,
+              target2: t.target2,
+              t1_hit: t.t1_hit,
+              t2_hit: t.t2_hit,
+              quantity: t.quantity,
+              capital_used: t.capital_used,
+              live_pnl: pnl,
+              live_pnl_pct: pnlPct,
+            };
           });
           if (updates.length) updateMany(updates);
           broadcast('trades', enriched);
@@ -996,6 +1304,7 @@ export function startDashboard(port = 3777) {
 
         // Portfolio update alongside
         const portfolio = getPortfolioSummary();
+        portfolio.maxPositions = TRADING.MAX_POSITIONS;
         broadcast('portfolio', portfolio);
       } catch {}
 
@@ -1012,8 +1321,11 @@ export function startDashboard(port = 3777) {
         try {
           const articles = await fetchAllNews();
           const scored = articles.slice(0, 20).map(a => ({
-            title: a.title, link: a.link, source: a.source,
-            pubDate: a.pubDate, score: scoreSentiment(a),
+            title: a.title,
+            link: a.link,
+            source: a.source,
+            pubDate: a.pubDate,
+            score: scoreSentiment(a),
           }));
           broadcast('news', scored);
         } catch {}
@@ -1023,10 +1335,22 @@ export function startDashboard(port = 3777) {
       if (pumpTick % 2 === 0) {
         try {
           const db = getDb();
-          const logs = db.prepare('SELECT * FROM agent_logs ORDER BY created_at DESC LIMIT 10').all();
-          const signals = db.prepare('SELECT * FROM agent_signals WHERE consumed = 0 ORDER BY created_at DESC LIMIT 5').all();
+          const logs = db
+            .prepare(
+              'SELECT * FROM agent_logs ORDER BY created_at DESC LIMIT 10',
+            )
+            .all();
+          const signals = db
+            .prepare(
+              'SELECT * FROM agent_signals WHERE consumed = 0 ORDER BY created_at DESC LIMIT 5',
+            )
+            .all();
           const orch = getOrchestrator();
-          broadcast('agents', { logs, signals, running: orch?.isRunning() || false });
+          broadcast('agents', {
+            logs,
+            signals,
+            running: orch?.isRunning() || false,
+          });
         } catch {}
       }
     }, 15_000); // 15-second base tick
@@ -1059,15 +1383,39 @@ export function startDashboard(port = 3777) {
     try {
       const { TRADING } = await import('../config/settings.js');
       const c = req.body;
-      if (c.maxPositions != null) TRADING.MAX_POSITIONS = parseInt(c.maxPositions);
-      if (c.maxCapitalPerPosition != null) TRADING.MAX_CAPITAL_PER_POSITION = parseFloat(c.maxCapitalPerPosition) / 100;
-      if (c.maxLossPerTrade != null) TRADING.MAX_LOSS_PER_TRADE = parseFloat(c.maxLossPerTrade) / 100;
-      if (c.atrStopMultiplier != null) TRADING.ATR_STOP_MULTIPLIER = parseFloat(c.atrStopMultiplier);
-      if (c.trailingStopATR != null) TRADING.TRAILING_STOP_ATR = parseFloat(c.trailingStopATR);
-      if (c.trailingTriggerPct != null) TRADING.TRAILING_TRIGGER_PCT = parseFloat(c.trailingTriggerPct);
-      if (c.riskRewardT1 != null) TRADING.RISK_REWARD.T1 = parseFloat(c.riskRewardT1);
-      if (c.riskRewardT2 != null) TRADING.RISK_REWARD.T2 = parseFloat(c.riskRewardT2);
-      if (c.noNewEntryAfter != null) TRADING.NO_NEW_ENTRY_AFTER = c.noNewEntryAfter;
+      if (c.maxPositions != null)
+        TRADING.MAX_POSITIONS = parseInt(c.maxPositions);
+      if (c.maxCapitalPerPosition != null)
+        TRADING.MAX_CAPITAL_PER_POSITION =
+          parseFloat(c.maxCapitalPerPosition) / 100;
+      if (c.maxLossPerTrade != null)
+        TRADING.MAX_LOSS_PER_TRADE = parseFloat(c.maxLossPerTrade) / 100;
+      if (c.atrStopMultiplier != null)
+        TRADING.ATR_STOP_MULTIPLIER = parseFloat(c.atrStopMultiplier);
+      if (c.trailingStopATR != null)
+        TRADING.TRAILING_STOP_ATR = parseFloat(c.trailingStopATR);
+      if (c.trailingTriggerPct != null)
+        TRADING.TRAILING_TRIGGER_PCT = parseFloat(c.trailingTriggerPct);
+      if (c.riskRewardT1 != null)
+        TRADING.RISK_REWARD.T1 = parseFloat(c.riskRewardT1);
+      if (c.riskRewardT2 != null)
+        TRADING.RISK_REWARD.T2 = parseFloat(c.riskRewardT2);
+      if (c.noNewEntryAfter != null)
+        TRADING.NO_NEW_ENTRY_AFTER = c.noNewEntryAfter;
+
+      // Persist trading config to disk
+      const { saveConfigSection } = await import('../config/persist.js');
+      saveConfigSection('trading', {
+        MAX_POSITIONS: TRADING.MAX_POSITIONS,
+        MAX_CAPITAL_PER_POSITION: TRADING.MAX_CAPITAL_PER_POSITION,
+        MAX_LOSS_PER_TRADE: TRADING.MAX_LOSS_PER_TRADE,
+        ATR_STOP_MULTIPLIER: TRADING.ATR_STOP_MULTIPLIER,
+        TRAILING_STOP_ATR: TRADING.TRAILING_STOP_ATR,
+        TRAILING_TRIGGER_PCT: TRADING.TRAILING_TRIGGER_PCT,
+        RISK_REWARD: TRADING.RISK_REWARD,
+        NO_NEW_ENTRY_AFTER: TRADING.NO_NEW_ENTRY_AFTER,
+      });
+
       res.json({ success: true, message: 'Configuration updated' });
     } catch (err) {
       res.status(500).json({ error: err.message });
@@ -1078,7 +1426,8 @@ export function startDashboard(port = 3777) {
 
   app.get('/api/journal', async (req, res) => {
     try {
-      const { getJournalEntries, getJournalStats } = await import('../trading/journal.js');
+      const { getJournalEntries, getJournalStats } =
+        await import('../trading/journal.js');
       const days = parseInt(req.query.days || '30', 10);
       const symbol = req.query.symbol || undefined;
       const tag = req.query.tag || undefined;
@@ -1086,7 +1435,16 @@ export function startDashboard(port = 3777) {
       const stats = getJournalStats(days);
       res.json({ entries, stats });
     } catch (err) {
-      res.json({ entries: [], stats: { totalEntries: 0, avgRating: 0, tagBreakdown: {}, winners: 0, losers: 0 } });
+      res.json({
+        entries: [],
+        stats: {
+          totalEntries: 0,
+          avgRating: 0,
+          tagBreakdown: {},
+          winners: 0,
+          losers: 0,
+        },
+      });
     }
   });
 
@@ -1123,19 +1481,78 @@ export function startDashboard(port = 3777) {
     if (!token || !chatId) {
       return res.status(400).json({ error: 'token and chatId required' });
     }
-    const { configureTelegram, sendTelegram } = await import('../utils/telegram.js');
+    const { configureTelegram, sendTelegram } =
+      await import('../utils/telegram.js');
+    const { saveConfigSection } = await import('../config/persist.js');
     configureTelegram(token, chatId);
-    await sendTelegram('✅ Tradease connected! You will receive trade alerts here.');
+    saveConfigSection('telegram', { token, chatId });
+    await sendTelegram(
+      '✅ Tradease connected! You will receive trade alerts here.',
+    );
     res.json({ success: true });
   });
 
   app.post('/api/telegram/test', async (req, res) => {
-    const { sendTelegram, isTelegramConfigured } = await import('../utils/telegram.js');
+    const { sendTelegram, isTelegramConfigured } =
+      await import('../utils/telegram.js');
     if (!isTelegramConfigured()) {
       return res.status(400).json({ error: 'Telegram not configured' });
     }
     await sendTelegram('🧪 Test message from Tradease dashboard!');
     res.json({ success: true });
+  });
+
+  // ── Email Configuration ───────────────────────────────────────────────
+
+  app.get('/api/email/status', async (req, res) => {
+    const { getEmailConfig } = await import('../utils/emailer.js');
+    res.json(getEmailConfig());
+  });
+
+  app.post('/api/email/configure', express.json(), async (req, res) => {
+    const { host, port, user, pass, from, to } = req.body;
+    if (!host || !user || !pass || !from || !to) {
+      return res
+        .status(400)
+        .json({
+          error: 'All SMTP fields required (host, port, user, pass, from, to)',
+        });
+    }
+    const { configureEmail, sendTestEmail } =
+      await import('../utils/emailer.js');
+    const { saveConfigSection } = await import('../config/persist.js');
+    configureEmail({ host, port: parseInt(port) || 587, user, pass, from, to });
+    saveConfigSection('email', {
+      host,
+      port: parseInt(port) || 587,
+      user,
+      pass,
+      from,
+      to,
+    });
+    try {
+      await sendTestEmail();
+      res.json({ success: true, message: 'Email configured and test sent' });
+    } catch (err) {
+      res.json({
+        success: true,
+        warning: `Saved but test failed: ${err.message}`,
+      });
+    }
+  });
+
+  app.post('/api/email/test', express.json(), async (req, res) => {
+    const { isEmailConfigured, sendTestEmail } =
+      await import('../utils/emailer.js');
+    if (!isEmailConfigured()) {
+      return res.status(400).json({ error: 'Email not configured' });
+    }
+    try {
+      await sendTestEmail();
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   // Catch-all JSON error handler for API routes

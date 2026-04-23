@@ -51,12 +51,22 @@ const STRATEGIES = {
       this._prevRsi[symbol] = rsi.value;
 
       // RSI crossing above 30 + MACD positive
-      if (prevRsi != null && prevRsi <= 30 && rsi.value > 30 && macd.histogram > 0) {
+      if (
+        prevRsi != null &&
+        prevRsi <= 30 &&
+        rsi.value > 30 &&
+        macd.histogram > 0
+      ) {
         return { type: 'CALL' };
       }
 
       // RSI crossing below 70 + MACD negative
-      if (prevRsi != null && prevRsi >= 70 && rsi.value < 70 && macd.histogram < 0) {
+      if (
+        prevRsi != null &&
+        prevRsi >= 70 &&
+        rsi.value < 70 &&
+        macd.histogram < 0
+      ) {
         return { type: 'PUT' };
       }
 
@@ -76,12 +86,20 @@ const STRATEGIES = {
       if (volume.ratio < 0.8) return null;
 
       // Price at lower BB + oversold
-      if (bollingerBands.percentB != null && bollingerBands.percentB < 0.05 && rsi.value < 35) {
+      if (
+        bollingerBands.percentB != null &&
+        bollingerBands.percentB < 0.05 &&
+        rsi.value < 35
+      ) {
         return { type: 'CALL' };
       }
 
       // Price at upper BB + overbought
-      if (bollingerBands.percentB != null && bollingerBands.percentB > 0.95 && rsi.value > 65) {
+      if (
+        bollingerBands.percentB != null &&
+        bollingerBands.percentB > 0.95 &&
+        rsi.value > 65
+      ) {
         return { type: 'PUT' };
       }
 
@@ -98,7 +116,9 @@ const STRATEGIES = {
 export function getStrategy(name) {
   const strategy = STRATEGIES[name];
   if (!strategy) {
-    throw new Error(`Unknown strategy: ${name}. Available: ${Object.keys(STRATEGIES).join(', ')}`);
+    throw new Error(
+      `Unknown strategy: ${name}. Available: ${Object.keys(STRATEGIES).join(', ')}`,
+    );
   }
   return strategy;
 }

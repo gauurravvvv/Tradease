@@ -7,7 +7,11 @@ import {
   validateTrade,
 } from './risk.js';
 import { logger } from '../utils/logger.js';
-import { notifyTradeEntry, notifyTradeExit, notifyStopLoss } from '../utils/notify.js';
+import {
+  notifyTradeEntry,
+  notifyTradeExit,
+  notifyStopLoss,
+} from '../utils/notify.js';
 
 // ---------------------------------------------------------------------------
 // Enter a new trade
@@ -49,20 +53,33 @@ export function enterTrade({
 
   // ---- check available capital + positions ----
   const openCapitalRow = db
-    .prepare('SELECT COALESCE(SUM(capital_used), 0) AS total FROM trades WHERE status = ?')
+    .prepare(
+      'SELECT COALESCE(SUM(capital_used), 0) AS total FROM trades WHERE status = ?',
+    )
     .get('OPEN');
   const openCapital = openCapitalRow.total;
   const available = TRADING.VIRTUAL_CAPITAL - openCapital;
 
-  const openTrades = db.prepare('SELECT * FROM trades WHERE status = ?').all('OPEN');
+  const openTrades = db
+    .prepare('SELECT * FROM trades WHERE status = ?')
+    .all('OPEN');
 
   // ---- validation via risk module ----
   const optionPrice = premium || entryPrice;
   const positionSize = calculatePositionSize(available, optionPrice, lotSize);
 
   const validation = validateTrade(
-    { symbol, capitalRequired: positionSize.capitalRequired, maxLoss: positionSize.maxLoss, type },
-    { positions: openTrades, capitalUsed: openCapital, totalCapital: TRADING.VIRTUAL_CAPITAL }
+    {
+      symbol,
+      capitalRequired: positionSize.capitalRequired,
+      maxLoss: positionSize.maxLoss,
+      type,
+    },
+    {
+      positions: openTrades,
+      capitalUsed: openCapital,
+      totalCapital: TRADING.VIRTUAL_CAPITAL,
+    },
   );
 
   if (!validation.valid) {
@@ -73,7 +90,9 @@ export function enterTrade({
   const capitalUsed = optionPrice * lotSize * quantity;
 
   if (quantity < 1) {
-    throw new Error(`Insufficient capital for even 1 lot. Need ₹${(optionPrice * lotSize).toFixed(0)}, available ₹${available.toFixed(0)}`);
+    throw new Error(
+      `Insufficient capital for even 1 lot. Need ₹${(optionPrice * lotSize).toFixed(0)}, available ₹${available.toFixed(0)}`,
+    );
   }
 
   // ---- insert ----
@@ -103,8 +122,12 @@ export function enterTrade({
     strike,
   });
 
-  const newTrade = db.prepare('SELECT * FROM trades WHERE id = ?').get(result.lastInsertRowid);
-  logger.trade(`ENTER ${type} ${symbol} @ ₹${entryPrice} | SL: ₹${stopLoss} | T1: ₹${target1} | T2: ₹${target2} | Lots: ${quantity}`);
+  const newTrade = db
+    .prepare('SELECT * FROM trades WHERE id = ?')
+    .get(result.lastInsertRowid);
+  logger.trade(
+    `ENTER ${type} ${symbol} @ ₹${entryPrice} | SL: ₹${stopLoss} | T1: ₹${target1} | T2: ₹${target2} | Lots: ${quantity}`,
+  );
   notifyTradeEntry(symbol, type, entryPrice);
   return newTrade;
 }
@@ -123,7 +146,9 @@ export function enterTrade({
  */
 export function exitTrade(tradeId, exitPrice, reason) {
   const db = getDb();
-  const trade = db.prepare('SELECT * FROM trades WHERE id = ? AND status = ?').get(tradeId, 'OPEN');
+  const trade = db
+    .prepare('SELECT * FROM trades WHERE id = ? AND status = ?')
+    .get(tradeId, 'OPEN');
 
   if (!trade) {
     throw new Error(`No open trade found with id ${tradeId}`);
@@ -135,7 +160,8 @@ export function exitTrade(tradeId, exitPrice, reason) {
       : (trade.entry_price - exitPrice) * trade.lot_size * trade.quantity;
   const pnl = (trade.pnl ?? 0) + closingPnl;
 
-  db.prepare(`
+  db.prepare(
+    `
     UPDATE trades
     SET status      = 'CLOSED',
         exit_price  = @exitPrice,
@@ -143,9 +169,12 @@ export function exitTrade(tradeId, exitPrice, reason) {
         exit_reason = @reason,
         exited_at   = datetime('now', '+5 hours', '+30 minutes')
     WHERE id = @id
-  `).run({ id: tradeId, exitPrice, pnl, reason });
+  `,
+  ).run({ id: tradeId, exitPrice, pnl, reason });
 
-  logger.trade(`EXIT ${trade.type} ${trade.symbol} @ ₹${exitPrice} | P&L: ₹${pnl.toFixed(0)} | ${reason}`);
+  logger.trade(
+    `EXIT ${trade.type} ${trade.symbol} @ ₹${exitPrice} | P&L: ₹${pnl.toFixed(0)} | ${reason}`,
+  );
   notifyTradeExit(trade.symbol, trade.type, exitPrice, pnl);
   return db.prepare('SELECT * FROM trades WHERE id = ?').get(tradeId);
 }
@@ -165,14 +194,18 @@ export function exitTrade(tradeId, exitPrice, reason) {
  */
 export function partialExit(tradeId, percentage, exitPrice, reason) {
   const db = getDb();
-  const trade = db.prepare('SELECT * FROM trades WHERE id = ? AND status = ?').get(tradeId, 'OPEN');
+  const trade = db
+    .prepare('SELECT * FROM trades WHERE id = ? AND status = ?')
+    .get(tradeId, 'OPEN');
 
   if (!trade) {
     throw new Error(`No open trade found with id ${tradeId}`);
   }
 
   if (percentage <= 0 || percentage >= 1) {
-    throw new Error('Percentage must be between 0 (exclusive) and 1 (exclusive). Use exitTrade for full close.');
+    throw new Error(
+      'Percentage must be between 0 (exclusive) and 1 (exclusive). Use exitTrade for full close.',
+    );
   }
 
   const qtyToClose = Math.max(1, Math.round(trade.quantity * percentage));
@@ -190,7 +223,8 @@ export function partialExit(tradeId, percentage, exitPrice, reason) {
 
   const existingPnl = trade.pnl ?? 0;
   const newPnl = existingPnl + partialPnl;
-  const newCapitalUsed = (trade.premium ?? trade.entry_price) * trade.lot_size * remainingQty;
+  const newCapitalUsed =
+    (trade.premium ?? trade.entry_price) * trade.lot_size * remainingQty;
 
   // Determine if T1 or T2 was hit based on the exit price
   let t1Hit = trade.t1_hit;
@@ -210,7 +244,8 @@ export function partialExit(tradeId, percentage, exitPrice, reason) {
     trailingStop = trade.entry_price;
   }
 
-  db.prepare(`
+  db.prepare(
+    `
     UPDATE trades
     SET quantity      = @remainingQty,
         capital_used  = @newCapitalUsed,
@@ -220,7 +255,8 @@ export function partialExit(tradeId, percentage, exitPrice, reason) {
         trailing_stop = @trailingStop,
         exit_reason   = @reason
     WHERE id = @id
-  `).run({
+  `,
+  ).run({
     id: tradeId,
     remainingQty,
     newCapitalUsed,
@@ -247,7 +283,9 @@ export function partialExit(tradeId, percentage, exitPrice, reason) {
  */
 export function stopTrade(tradeId, currentPrice) {
   const db = getDb();
-  const trade = db.prepare('SELECT * FROM trades WHERE id = ? AND status = ?').get(tradeId, 'OPEN');
+  const trade = db
+    .prepare('SELECT * FROM trades WHERE id = ? AND status = ?')
+    .get(tradeId, 'OPEN');
 
   if (!trade) {
     throw new Error(`No open trade found with id ${tradeId}`);
@@ -259,7 +297,8 @@ export function stopTrade(tradeId, currentPrice) {
       : (trade.entry_price - currentPrice) * trade.lot_size * trade.quantity;
   const pnl = (trade.pnl ?? 0) + closingPnl;
 
-  db.prepare(`
+  db.prepare(
+    `
     UPDATE trades
     SET status      = 'STOPPED',
         exit_price  = @exitPrice,
@@ -267,9 +306,12 @@ export function stopTrade(tradeId, currentPrice) {
         exit_reason = 'Stop-loss triggered',
         exited_at   = datetime('now', '+5 hours', '+30 minutes')
     WHERE id = @id
-  `).run({ id: tradeId, exitPrice: currentPrice, pnl });
+  `,
+  ).run({ id: tradeId, exitPrice: currentPrice, pnl });
 
-  logger.trade(`STOP ${trade.type} ${trade.symbol} @ ₹${currentPrice} | P&L: ₹${pnl.toFixed(0)}`);
+  logger.trade(
+    `STOP ${trade.type} ${trade.symbol} @ ₹${currentPrice} | P&L: ₹${pnl.toFixed(0)}`,
+  );
   notifyStopLoss(trade.symbol, currentPrice);
   return db.prepare('SELECT * FROM trades WHERE id = ?').get(tradeId);
 }
@@ -284,7 +326,9 @@ export function stopTrade(tradeId, currentPrice) {
  */
 export function getOpenTrades() {
   const db = getDb();
-  return db.prepare('SELECT * FROM trades WHERE status = ? ORDER BY entered_at DESC').all('OPEN');
+  return db
+    .prepare('SELECT * FROM trades WHERE status = ? ORDER BY entered_at DESC')
+    .all('OPEN');
 }
 
 /**
@@ -300,7 +344,7 @@ export function getTradeHistory(days = 30) {
       `SELECT * FROM trades
        WHERE status IN ('CLOSED', 'STOPPED')
          AND exited_at >= datetime('now', '+5 hours', '+30 minutes', '-' || @days || ' days')
-       ORDER BY exited_at DESC`
+       ORDER BY exited_at DESC`,
     )
     .all({ days });
 }
@@ -316,7 +360,9 @@ export function updateTradePrice(tradeId, currentPrice) {
   const db = getDb();
 
   const changes = db
-    .prepare('UPDATE trades SET current_price = @currentPrice WHERE id = @id AND status = ?')
+    .prepare(
+      'UPDATE trades SET current_price = @currentPrice WHERE id = @id AND status = ?',
+    )
     .run({ id: tradeId, currentPrice }, 'OPEN').changes;
 
   if (changes === 0) {

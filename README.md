@@ -51,11 +51,11 @@ AI-powered autonomous Indian F&O (Futures & Options) paper trading system. Three
 
 ### Agent Signal Flow
 
-| Producer | Signal | Consumer | Action |
-|----------|--------|----------|--------|
-| News Sentinel | `bullish_news` | Trade Strategist | Boost borderline candidates, Claude confirmation |
-| News Sentinel | `bearish_news` | Position Guardian | Tighten stops, evaluate exit |
-| News Sentinel | `urgent_exit` | Position Guardian | Immediate exit on losing positions, Claude decision on profitable |
+| Producer      | Signal         | Consumer          | Action                                                            |
+| ------------- | -------------- | ----------------- | ----------------------------------------------------------------- |
+| News Sentinel | `bullish_news` | Trade Strategist  | Boost borderline candidates, Claude confirmation                  |
+| News Sentinel | `bearish_news` | Position Guardian | Tighten stops, evaluate exit                                      |
+| News Sentinel | `urgent_exit`  | Position Guardian | Immediate exit on losing positions, Claude decision on profitable |
 
 ---
 
@@ -65,13 +65,13 @@ Tradease uses **Claude Code CLI** (`claude`) as its AI engine — spawned as a c
 
 ### How Claude is Used
 
-| Context | Model | When Called | Token Budget |
-|---------|-------|-------------|-------------|
-| **Pre-market scan** | Default (Sonnet) | Once per morning, analyzes top screened stocks | ~4000 output tokens |
-| **Deep research** | Default (Sonnet) | On-demand, full stock analysis | ~4000 output tokens |
-| **Trade Strategist agent** | Haiku 4.5 | Only for borderline candidates (score 60-69 with news) | ~600 output tokens |
-| **Position Guardian agent** | Haiku 4.5 | Only for ambiguous exits (profitable + urgent signal) | ~400 output tokens |
-| **News Sentinel agent** | Haiku 4.5 | Only for edge-case headline relevance scoring | ~400 output tokens |
+| Context                     | Model            | When Called                                            | Token Budget        |
+| --------------------------- | ---------------- | ------------------------------------------------------ | ------------------- |
+| **Pre-market scan**         | Default (Sonnet) | Once per morning, analyzes top screened stocks         | ~4000 output tokens |
+| **Deep research**           | Default (Sonnet) | On-demand, full stock analysis                         | ~4000 output tokens |
+| **Trade Strategist agent**  | Haiku 4.5        | Only for borderline candidates (score 60-69 with news) | ~600 output tokens  |
+| **Position Guardian agent** | Haiku 4.5        | Only for ambiguous exits (profitable + urgent signal)  | ~400 output tokens  |
+| **News Sentinel agent**     | Haiku 4.5        | Only for edge-case headline relevance scoring          | ~400 output tokens  |
 
 ### Token Efficiency
 
@@ -104,6 +104,7 @@ npm link
 ### First Run
 
 On first run, Tradease automatically:
+
 - Creates `data/trades.db` (SQLite database)
 - Creates `data/logs/` directory for daily log files
 - Creates `data/backtests/` for backtest result JSON files
@@ -124,6 +125,7 @@ export TELEGRAM_CHAT_ID=your_chat_id
 ### Timezone
 
 All scheduling and market hours are based on **IST (Indian Standard Time)**. The system detects market sessions automatically:
+
 - Pre-market: before 9:00 AM IST
 - Pre-open: 9:00 - 9:15 AM IST
 - Market open: 9:15 AM - 3:30 PM IST
@@ -160,18 +162,18 @@ tradease news              # News + sentiment
 
 ## Commands
 
-| Command | Description |
-|---------|-------------|
-| `tradease scan` | Pre-market screening + AI analysis, interactive trade execution |
-| `tradease research [quick\|deep] <SYMBOL>` | Stock analysis with technicals, news, entry/SL/targets |
-| `tradease news` | Top 15 stocks consolidated news + sentiment scores |
-| `tradease dashboard` | Web dashboard at `localhost:3777` |
-| `tradease portfolio` | Portfolio overview + unrealized P&L |
-| `tradease trades` | Active trades with live P&L |
-| `tradease exit <SYMBOL>` | Manual exit position |
-| `tradease history` | Closed trades + win rate + performance stats |
-| `tradease status` / `pulse` | Full market status (indices, global, FII/DII, sectors, VIX) |
-| `tradease daemon` | Start 24x7 daemon with all schedulers + agents |
+| Command                                    | Description                                                     |
+| ------------------------------------------ | --------------------------------------------------------------- |
+| `tradease scan`                            | Pre-market screening + AI analysis, interactive trade execution |
+| `tradease research [quick\|deep] <SYMBOL>` | Stock analysis with technicals, news, entry/SL/targets          |
+| `tradease news`                            | Top 15 stocks consolidated news + sentiment scores              |
+| `tradease dashboard`                       | Web dashboard at `localhost:3777`                               |
+| `tradease portfolio`                       | Portfolio overview + unrealized P&L                             |
+| `tradease trades`                          | Active trades with live P&L                                     |
+| `tradease exit <SYMBOL>`                   | Manual exit position                                            |
+| `tradease history`                         | Closed trades + win rate + performance stats                    |
+| `tradease status` / `pulse`                | Full market status (indices, global, FII/DII, sectors, VIX)     |
+| `tradease daemon`                          | Start 24x7 daemon with all schedulers + agents                  |
 
 ---
 
@@ -180,6 +182,7 @@ tradease news              # News + sentiment
 Dark-themed, real-time dashboard with SSE live updates.
 
 **Sections:**
+
 - **Portfolio** — capital, available, unrealized P&L, open positions count
 - **Market Pulse** — Nifty, BankNifty, VIX, market session status
 - **Global Markets** — S&P 500, Nasdaq, Dow, Nikkei, Hang Seng, Crude, Gold, DXY
@@ -202,6 +205,7 @@ Dark-themed, real-time dashboard with SSE live updates.
 ## Autonomous Agents
 
 ### Trade Strategist
+
 - Runs every 10 minutes during market hours (9:30 AM - 2:30 PM)
 - Screens stocks, filters by RSI/volume/confluence
 - Auto-enters trades scoring 70+ (65+ with high confluence)
@@ -209,6 +213,7 @@ Dark-themed, real-time dashboard with SSE live updates.
 - Max 1 entry per tick
 
 ### Position Guardian
+
 - Runs every 2 minutes during market hours (9:15 AM - 3:20 PM)
 - Checks stop-loss, trailing stop, T1/T2 targets for every position
 - Adaptive trailing stops using RSI + MACD momentum
@@ -217,6 +222,7 @@ Dark-themed, real-time dashboard with SSE live updates.
 - Wind-down at 3:15 PM — close everything
 
 ### News Sentinel
+
 - Runs every 5 minutes during market hours
 - Monitors RSS feeds for open positions + strategist watchlist
 - Keyword-based sentiment scoring (strong neg: -2, mild neg: -1, positive: +1, strong positive: +2)
@@ -228,10 +234,10 @@ Dark-themed, real-time dashboard with SSE live updates.
 
 Three built-in strategies:
 
-| Strategy | Logic |
-|----------|-------|
-| **Screener** | Full multi-factor scoring (same as live screener) |
-| **Momentum** | RSI oversold + MACD bullish crossover + volume spike |
+| Strategy           | Logic                                                    |
+| ------------------ | -------------------------------------------------------- |
+| **Screener**       | Full multi-factor scoring (same as live screener)        |
+| **Momentum**       | RSI oversold + MACD bullish crossover + volume spike     |
 | **Mean Reversion** | RSI extreme + Bollinger Band touch + volume confirmation |
 
 Run from dashboard UI or CLI. Metrics: total P&L, win rate, Sharpe ratio, max drawdown, profit factor, best/worst trade, consecutive wins/losses, recovery factor.
@@ -240,21 +246,21 @@ Run from dashboard UI or CLI. Metrics: total P&L, win rate, Sharpe ratio, max dr
 
 ## Trading Rules
 
-| Rule | Value |
-|------|-------|
-| Virtual capital | ₹2,00,000 |
-| Max concurrent positions | 3 |
-| Max capital per position | 20% |
-| Max loss per trade | 5% of capital |
-| Stop-loss | 1.5x ATR |
-| Trailing stop trigger | After 1% profit |
-| Trailing stop distance | 0.5x ATR (adaptive with momentum) |
-| T1 partial exit | 50% at 2:1 R:R |
-| T2 partial exit | 25% at 3:1 R:R |
-| Runner | 25% rides with trailing SL |
-| Index crash exit | -1.5% Nifty → exit ALL |
-| No new entries after | 3:00 PM IST |
-| Wind-down exit | 3:15 PM IST |
+| Rule                     | Value                             |
+| ------------------------ | --------------------------------- |
+| Virtual capital          | ₹2,00,000                         |
+| Max concurrent positions | 3                                 |
+| Max capital per position | 20%                               |
+| Max loss per trade       | 5% of capital                     |
+| Stop-loss                | 1.5x ATR                          |
+| Trailing stop trigger    | After 1% profit                   |
+| Trailing stop distance   | 0.5x ATR (adaptive with momentum) |
+| T1 partial exit          | 50% at 2:1 R:R                    |
+| T2 partial exit          | 25% at 3:1 R:R                    |
+| Runner                   | 25% rides with trailing SL        |
+| Index crash exit         | -1.5% Nifty → exit ALL            |
+| No new entries after     | 3:00 PM IST                       |
+| Wind-down exit           | 3:15 PM IST                       |
 
 ---
 
@@ -345,11 +351,11 @@ Alerts fire on: trade entry, exit, stop-loss, target hits, index crash, daily su
 
 All data is local — nothing leaves your machine (except Claude CLI calls and Yahoo Finance/RSS fetches).
 
-| Data | Location | Auto-managed |
-|------|----------|-------------|
-| Trades database | `data/trades.db` | Auto-created, SQLite |
-| Daily logs | `data/logs/YYYY-MM-DD.log` | Auto-rotated, cleaned after 30 days |
-| Backtest results | `data/backtests/*.json` | Auto-pruned, keeps last 20 |
+| Data             | Location                   | Auto-managed                        |
+| ---------------- | -------------------------- | ----------------------------------- |
+| Trades database  | `data/trades.db`           | Auto-created, SQLite                |
+| Daily logs       | `data/logs/YYYY-MM-DD.log` | Auto-rotated, cleaned after 30 days |
+| Backtest results | `data/backtests/*.json`    | Auto-pruned, keeps last 20          |
 
 ---
 
@@ -358,6 +364,7 @@ All data is local — nothing leaves your machine (except Claude CLI calls and Y
 All settings live in `src/config/settings.js`. Edit directly or tune from the dashboard UI (Agent Config section).
 
 Key settings you might want to change:
+
 - `VIRTUAL_CAPITAL` — starting paper capital (default: ₹2,00,000)
 - `MAX_POSITIONS` — concurrent trades (default: 3)
 - `ATR_STOP_MULTIPLIER` — stop-loss tightness (default: 1.5x ATR)
@@ -369,19 +376,19 @@ Settings changed via dashboard UI are **in-memory only** — they reset on resta
 
 ## Tech Stack
 
-| Component | Technology |
-|-----------|-----------|
-| Runtime | Node.js 20+ (ES modules) |
-| AI Engine | Claude (via Claude Code CLI) |
-| Market Data | Yahoo Finance |
-| News | Google News RSS |
-| Database | SQLite (better-sqlite3) |
-| Web Server | Express 5 |
-| Charts | LightweightCharts (TradingView) |
-| Technical Analysis | technicalindicators |
-| Scheduling | node-cron |
-| CLI | Commander.js |
-| Notifications | node-notifier + Telegram Bot API |
+| Component          | Technology                       |
+| ------------------ | -------------------------------- |
+| Runtime            | Node.js 20+ (ES modules)         |
+| AI Engine          | Claude (via Claude Code CLI)     |
+| Market Data        | Yahoo Finance                    |
+| News               | Google News RSS                  |
+| Database           | SQLite (better-sqlite3)          |
+| Web Server         | Express 5                        |
+| Charts             | LightweightCharts (TradingView)  |
+| Technical Analysis | technicalindicators              |
+| Scheduling         | node-cron                        |
+| CLI                | Commander.js                     |
+| Notifications      | node-notifier + Telegram Bot API |
 
 ---
 

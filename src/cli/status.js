@@ -6,7 +6,13 @@ import { checkIndexHealth } from '../listeners/index-monitor.js';
 import { getGlobalCues } from '../data/global-cues.js';
 import { getFiiDiiData } from '../data/fii-dii.js';
 import { getSectorStrength } from '../analysis/sectors.js';
-import { displayFiiDiiBar, displaySectorBar, displaySentimentBar, formatCurrency, formatPercent } from './display.js';
+import {
+  displayFiiDiiBar,
+  displaySectorBar,
+  displaySentimentBar,
+  formatCurrency,
+  formatPercent,
+} from './display.js';
 
 /**
  * Determine if Indian market is currently open.
@@ -14,17 +20,28 @@ import { displayFiiDiiBar, displaySectorBar, displaySentimentBar, formatCurrency
  */
 function getMarketSession() {
   const now = new Date();
-  const ist = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+  const ist = new Date(
+    now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }),
+  );
   const day = ist.getDay(); // 0=Sun, 6=Sat
   const h = ist.getHours();
   const m = ist.getMinutes();
   const mins = h * 60 + m;
 
-  if (day === 0 || day === 6) return { status: 'CLOSED', label: 'Weekend', color: chalk.gray };
-  if (mins < 9 * 60) return { status: 'PRE-MARKET', label: 'Pre-market', color: chalk.yellow };
-  if (mins < 9 * 60 + 15) return { status: 'PRE-OPEN', label: 'Pre-open auction', color: chalk.yellow };
-  if (mins < 15 * 60 + 30) return { status: 'OPEN', label: 'Market Open', color: chalk.green };
-  if (mins < 16 * 60) return { status: 'POST-MARKET', label: 'Post-market', color: chalk.yellow };
+  if (day === 0 || day === 6)
+    return { status: 'CLOSED', label: 'Weekend', color: chalk.gray };
+  if (mins < 9 * 60)
+    return { status: 'PRE-MARKET', label: 'Pre-market', color: chalk.yellow };
+  if (mins < 9 * 60 + 15)
+    return {
+      status: 'PRE-OPEN',
+      label: 'Pre-open auction',
+      color: chalk.yellow,
+    };
+  if (mins < 15 * 60 + 30)
+    return { status: 'OPEN', label: 'Market Open', color: chalk.green };
+  if (mins < 16 * 60)
+    return { status: 'POST-MARKET', label: 'Post-market', color: chalk.yellow };
   return { status: 'CLOSED', label: 'Market Closed', color: chalk.gray };
 }
 
@@ -53,50 +70,65 @@ export async function runMarketStatus() {
   const session = getMarketSession();
   const now = new Date();
   const timeStr = now.toLocaleString('en-IN', {
-    weekday: 'short', day: '2-digit', month: 'short', year: 'numeric',
-    hour: '2-digit', minute: '2-digit', hour12: true,
+    weekday: 'short',
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
     timeZone: 'Asia/Kolkata',
   });
 
-  const statusBadge = session.status === 'OPEN'
-    ? chalk.bgGreen.black.bold(` ${session.status} `)
-    : session.status.includes('PRE') || session.status === 'POST-MARKET'
-      ? chalk.bgYellow.black.bold(` ${session.status} `)
-      : chalk.bgGray.white.bold(` ${session.status} `);
+  const statusBadge =
+    session.status === 'OPEN'
+      ? chalk.bgGreen.black.bold(` ${session.status} `)
+      : session.status.includes('PRE') || session.status === 'POST-MARKET'
+        ? chalk.bgYellow.black.bold(` ${session.status} `)
+        : chalk.bgGray.white.bold(` ${session.status} `);
 
   const headerLines = [];
-  headerLines.push(`  ${chalk.bold.cyan('TRADEASE')}  ${statusBadge}  ${chalk.gray(timeStr)}`);
+  headerLines.push(
+    `  ${chalk.bold.cyan('TRADEASE')}  ${statusBadge}  ${chalk.gray(timeStr)}`,
+  );
 
   // ── Index Levels ────────────────────────────────────────
   if (index) {
     const nifty = index.nifty || {};
     const bank = index.bankNifty || {};
-    const sevColor = index.severity === 'critical' ? chalk.red
-      : index.severity === 'warning' ? chalk.yellow : chalk.green;
+    const sevColor =
+      index.severity === 'critical'
+        ? chalk.red
+        : index.severity === 'warning'
+          ? chalk.yellow
+          : chalk.green;
 
     headerLines.push('');
     headerLines.push(
       `  ${chalk.white.bold('NIFTY')}   ${chalk.white(nifty.price ? nifty.price.toLocaleString('en-IN') : '--')} ${formatPercent(nifty.changePct)}` +
-      `    ${chalk.white.bold('BANKNIFTY')}   ${chalk.white(bank.price ? bank.price.toLocaleString('en-IN') : '--')} ${formatPercent(bank.changePct)}` +
-      `    ${sevColor.bold(index.severity?.toUpperCase() || 'NORMAL')}`
+        `    ${chalk.white.bold('BANKNIFTY')}   ${chalk.white(bank.price ? bank.price.toLocaleString('en-IN') : '--')} ${formatPercent(bank.changePct)}` +
+        `    ${sevColor.bold(index.severity?.toUpperCase() || 'NORMAL')}`,
     );
   }
 
   // ── VIX ─────────────────────────────────────────────────
   if (global?.volatility?.vix) {
     const vix = global.volatility.vix;
-    const vixColor = vix.price > 20 ? chalk.red : vix.price > 15 ? chalk.yellow : chalk.green;
+    const vixColor =
+      vix.price > 20 ? chalk.red : vix.price > 15 ? chalk.yellow : chalk.green;
     headerLines.push(
-      `  ${chalk.white.bold('VIX')}     ${vixColor(vix.price?.toFixed(1))} ${formatPercent(vix.changePct)}`
+      `  ${chalk.white.bold('VIX')}     ${vixColor(vix.price?.toFixed(1))} ${formatPercent(vix.changePct)}`,
     );
   }
 
-  console.log(boxen(headerLines.join('\n'), {
-    padding: { top: 0, bottom: 0, left: 0, right: 1 },
-    margin: { top: 1, bottom: 0 },
-    borderStyle: 'double',
-    borderColor: session.status === 'OPEN' ? 'green' : 'gray',
-  }));
+  console.log(
+    boxen(headerLines.join('\n'), {
+      padding: { top: 0, bottom: 0, left: 0, right: 1 },
+      margin: { top: 1, bottom: 0 },
+      borderStyle: 'double',
+      borderColor: session.status === 'OPEN' ? 'green' : 'gray',
+    }),
+  );
 
   // ── Global Cues ─────────────────────────────────────────
   if (global) {
@@ -113,7 +145,11 @@ export async function runMarketStatus() {
     const addRow = (name, q) => {
       if (!q) return;
       const chg = formatPercent(q.changePct);
-      globalTable.push([chalk.white(name), chalk.white(q.price?.toFixed(1) || '--'), chg]);
+      globalTable.push([
+        chalk.white(name),
+        chalk.white(q.price?.toFixed(1) || '--'),
+        chg,
+      ]);
     };
 
     addRow('S&P 500', global.us?.sp500);
@@ -131,7 +167,9 @@ export async function runMarketStatus() {
 
     // Sentiment
     if (global.sentimentScore != null) {
-      console.log(`  ${chalk.white('GLOBAL MOOD:')} ${displaySentimentBar(global.sentimentScore)}`);
+      console.log(
+        `  ${chalk.white('GLOBAL MOOD:')} ${displaySentimentBar(global.sentimentScore)}`,
+      );
     }
   }
 
@@ -152,16 +190,26 @@ export async function runMarketStatus() {
 
     const sectorTable = new Table({
       style: { head: [], border: ['gray'] },
-      head: [chalk.cyan('#'), chalk.cyan('Sector'), chalk.cyan('Change'), chalk.cyan('Trend')],
+      head: [
+        chalk.cyan('#'),
+        chalk.cyan('Sector'),
+        chalk.cyan('Change'),
+        chalk.cyan('Trend'),
+      ],
       colWidths: [4, 24, 10, 10],
     });
 
-    const sorted = [...sectorData].sort((a, b) => (b.todayChange || 0) - (a.todayChange || 0));
+    const sorted = [...sectorData].sort(
+      (a, b) => (b.todayChange || 0) - (a.todayChange || 0),
+    );
     sorted.forEach((s, i) => {
-      const chg = s.todayChange != null ? formatPercent(s.todayChange) : chalk.gray('--');
-      const trendIcon = s.trend?.includes('up') ? chalk.green('▲')
-        : s.trend?.includes('down') ? chalk.red('▼')
-        : chalk.gray('─');
+      const chg =
+        s.todayChange != null ? formatPercent(s.todayChange) : chalk.gray('--');
+      const trendIcon = s.trend?.includes('up')
+        ? chalk.green('▲')
+        : s.trend?.includes('down')
+          ? chalk.red('▼')
+          : chalk.gray('─');
       sectorTable.push([
         chalk.gray(String(i + 1)),
         chalk.white(s.sector?.replace('Nifty ', '') || '--'),

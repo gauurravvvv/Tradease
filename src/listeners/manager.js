@@ -1,7 +1,13 @@
 import { checkPrices } from './price.js';
 import { checkNewsForPositions } from './news-monitor.js';
 import { checkIndexHealth } from './index-monitor.js';
-import { getOpenTrades, exitTrade, partialExit, stopTrade, updateTradePrice } from '../trading/manager.js';
+import {
+  getOpenTrades,
+  exitTrade,
+  partialExit,
+  stopTrade,
+  updateTradePrice,
+} from '../trading/manager.js';
 import { getQuote } from '../data/market.js';
 import { TRADING } from '../config/settings.js';
 import { logger } from '../utils/logger.js';
@@ -19,6 +25,7 @@ export class ListenerManager {
     this.indexInterval = null;
     this.tickCount = 0;
     this.running = false;
+    this._lastTickTime = 0;
   }
 
   /**
@@ -32,8 +39,11 @@ export class ListenerManager {
 
     this.running = true;
     this.tickCount = 0;
+    this._lastTickTime = Date.now();
 
-    logger.info(`[listener] Starting position monitor (interval: ${this.tickIntervalMs / 1000}s)`);
+    logger.info(
+      `[listener] Starting position monitor (interval: ${this.tickIntervalMs / 1000}s)`,
+    );
 
     // Single interval drives all checks via tick()
     this.priceInterval = setInterval(() => this.tick(), this.tickIntervalMs);
@@ -70,24 +80,43 @@ export class ListenerManager {
     this.tickCount++;
     const ts = new Date().toLocaleTimeString('en-IN');
 
+    // Detect sleep/suspend gaps
+    const now = Date.now();
+    if (this._lastTickTime > 0) {
+      const gap = now - this._lastTickTime;
+      if (gap > this.tickIntervalMs * 3) {
+        const gapMin = Math.round(gap / 60000);
+        logger.warn(
+          `[listener] Detected ${gapMin}m gap (system sleep?). Resuming tick #${this.tickCount}.`,
+        );
+      }
+    }
+    this._lastTickTime = now;
+
     try {
       // 1. Get open trades
       const openTrades = getOpenTrades();
 
       if (!openTrades || openTrades.length === 0) {
         if (this.tickCount % 10 === 0) {
-          logger.debug(`[listener] Tick #${this.tickCount} @ ${ts} — No open positions`);
+          logger.debug(
+            `[listener] Tick #${this.tickCount} @ ${ts} — No open positions`,
+          );
         }
         return;
       }
 
-      logger.debug(`[listener] Tick #${this.tickCount} @ ${ts} — Checking ${openTrades.length} position(s)`);
+      logger.debug(
+        `[listener] Tick #${this.tickCount} @ ${ts} — Checking ${openTrades.length} position(s)`,
+      );
 
       // 2. Check index health first — emergency exit if critical
       const indexHealth = await checkIndexHealth();
 
       if (indexHealth.severity === 'critical') {
-        logger.error(`[listener] CRITICAL: Market crash detected! Nifty ${indexHealth.nifty.changePct?.toFixed(2)}%, BankNifty ${indexHealth.bankNifty.changePct?.toFixed(2)}%`);
+        logger.error(
+          `[listener] CRITICAL: Market crash detected! Nifty ${indexHealth.nifty.changePct?.toFixed(2)}%, BankNifty ${indexHealth.bankNifty.changePct?.toFixed(2)}%`,
+        );
         logger.error('[listener] Emergency exit ALL positions');
         notifyIndexCrash('Nifty', indexHealth.nifty.changePct || 0);
 
@@ -97,19 +126,25 @@ export class ListenerManager {
             try {
               const q = await getQuote(trade.symbol);
               exitPrice = q.price;
-            } catch { /* use last known */ }
+            } catch {
+              /* use last known */
+            }
             const reason = `Emergency exit — index crash (Nifty: ${indexHealth.nifty.changePct?.toFixed(2)}%)`;
             exitTrade(trade.id, exitPrice, reason);
             logger.trade(`[listener] Exited ${trade.symbol} (emergency)`);
           } catch (err) {
-            logger.error(`[listener] Failed to exit ${trade.symbol}: ${err.message}`);
+            logger.error(
+              `[listener] Failed to exit ${trade.symbol}: ${err.message}`,
+            );
           }
         }
         return; // Skip further checks after emergency exit
       }
 
       if (indexHealth.alert) {
-        logger.warn(`[listener] WARNING: Index weakness — Nifty ${indexHealth.nifty.changePct?.toFixed(2)}%, BankNifty ${indexHealth.bankNifty.changePct?.toFixed(2)}%`);
+        logger.warn(
+          `[listener] WARNING: Index weakness — Nifty ${indexHealth.nifty.changePct?.toFixed(2)}%, BankNifty ${indexHealth.bankNifty.changePct?.toFixed(2)}%`,
+        );
       }
 
       // 3. Check prices → execute exits if needed
@@ -120,13 +155,18 @@ export class ListenerManager {
           case 'FULL_EXIT':
             logger.trade(`[listener] EXIT ${trade.symbol}: ${reason}`);
             try {
-              if (reason.includes('Stop-loss') || reason.includes('Trailing stop')) {
+              if (
+                reason.includes('Stop-loss') ||
+                reason.includes('Trailing stop')
+              ) {
                 stopTrade(trade.id, currentPrice);
               } else {
                 exitTrade(trade.id, currentPrice, reason);
               }
             } catch (err) {
-              logger.error(`[listener] Failed to exit ${trade.symbol}: ${err.message}`);
+              logger.error(
+                `[listener] Failed to exit ${trade.symbol}: ${err.message}`,
+              );
             }
             break;
 
@@ -134,9 +174,16 @@ export class ListenerManager {
             logger.trade(`[listener] PARTIAL T1 ${trade.symbol}: ${reason}`);
             notifyTargetHit(trade.symbol, 1, currentPrice);
             try {
-              partialExit(trade.id, TRADING.PROFIT_BOOKING.T1, currentPrice, reason);
+              partialExit(
+                trade.id,
+                TRADING.PROFIT_BOOKING.T1,
+                currentPrice,
+                reason,
+              );
             } catch (err) {
-              logger.error(`[listener] Failed partial T1 ${trade.symbol}: ${err.message}`);
+              logger.error(
+                `[listener] Failed partial T1 ${trade.symbol}: ${err.message}`,
+              );
             }
             break;
 
@@ -144,10 +191,13 @@ export class ListenerManager {
             logger.trade(`[listener] PARTIAL T2 ${trade.symbol}: ${reason}`);
             notifyTargetHit(trade.symbol, 2, currentPrice);
             try {
-              const t2Pct = TRADING.PROFIT_BOOKING.T2 / (1 - TRADING.PROFIT_BOOKING.T1);
+              const t2Pct =
+                TRADING.PROFIT_BOOKING.T2 / (1 - TRADING.PROFIT_BOOKING.T1);
               partialExit(trade.id, t2Pct, currentPrice, reason);
             } catch (err) {
-              logger.error(`[listener] Failed partial T2 ${trade.symbol}: ${err.message}`);
+              logger.error(
+                `[listener] Failed partial T2 ${trade.symbol}: ${err.message}`,
+              );
             }
             break;
 
@@ -156,7 +206,9 @@ export class ListenerManager {
             try {
               updateTradePrice(trade.id, currentPrice);
             } catch (err) {
-              logger.error(`[listener] Failed trailing update ${trade.symbol}: ${err.message}`);
+              logger.error(
+                `[listener] Failed trailing update ${trade.symbol}: ${err.message}`,
+              );
             }
             break;
 
@@ -177,9 +229,17 @@ export class ListenerManager {
         if (currentTrades.length > 0) {
           const newsAlerts = await checkNewsForPositions(currentTrades);
 
-          for (const { trade, sentiment, sentimentScore, alert, newsItems } of newsAlerts) {
+          for (const {
+            trade,
+            sentiment,
+            sentimentScore,
+            alert,
+            newsItems,
+          } of newsAlerts) {
             if (alert) {
-              logger.warn(`[listener] NEWS ALERT ${trade.symbol}: sentiment=${sentiment} (score: ${sentimentScore})`);
+              logger.warn(
+                `[listener] NEWS ALERT ${trade.symbol}: sentiment=${sentiment} (score: ${sentimentScore})`,
+              );
               for (const item of newsItems.slice(0, 3)) {
                 logger.info(`  → ${item.title}`);
               }

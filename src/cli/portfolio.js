@@ -1,7 +1,16 @@
 import { getOpenTrades, getTradeHistory } from '../trading/manager.js';
-import { getPortfolioSummary, getPerformanceStats } from '../trading/portfolio.js';
+import {
+  getPortfolioSummary,
+  getPerformanceStats,
+} from '../trading/portfolio.js';
 import { getQuote } from '../data/market.js';
-import { displayHeader, displayPortfolioTable, displayTradesTable, formatCurrency, formatPercent } from './display.js';
+import {
+  displayHeader,
+  displayPortfolioTable,
+  displayTradesTable,
+  formatCurrency,
+  formatPercent,
+} from './display.js';
 import chalk from 'chalk';
 import Table from 'cli-table3';
 
@@ -45,7 +54,7 @@ export async function showTrades() {
   }
 
   // Fetch live prices for all open trades
-  const pricePromises = openTrades.map(async (trade) => {
+  const pricePromises = openTrades.map(async trade => {
     try {
       const quote = await getQuote(trade.symbol);
       return {
@@ -75,9 +84,11 @@ export async function showTrades() {
   }
 
   const pnlColor = totalPnl >= 0 ? chalk.green : chalk.red;
-  const pnlPct = totalCapital > 0 ? (totalPnl / totalCapital * 100) : 0;
+  const pnlPct = totalCapital > 0 ? (totalPnl / totalCapital) * 100 : 0;
 
-  console.log(`  Total Unrealized P&L: ${pnlColor(formatCurrency(totalPnl))} (${formatPercent(pnlPct)})`);
+  console.log(
+    `  Total Unrealized P&L: ${pnlColor(formatCurrency(totalPnl))} (${formatPercent(pnlPct)})`,
+  );
   console.log(`  Positions: ${tradesWithPrices.length}\n`);
 }
 
@@ -117,7 +128,9 @@ export async function showHistory(days = 30) {
   });
 
   for (const t of history) {
-    const exitDate = t.exited_at ? new Date(t.exited_at).toLocaleDateString('en-IN') : '—';
+    const exitDate = t.exited_at
+      ? new Date(t.exited_at).toLocaleDateString('en-IN')
+      : '—';
     const pnl = t.pnl || 0;
     const pnlStr = formatCurrency(pnl);
     const pnlColored = pnl >= 0 ? chalk.green(pnlStr) : chalk.red(pnlStr);
@@ -146,7 +159,9 @@ export async function showHistory(days = 30) {
   const totalPnl = history.reduce((sum, t) => sum + (t.pnl || 0), 0);
   const pnlColor = totalPnl >= 0 ? chalk.green : chalk.red;
 
-  console.log(`  ${chalk.green(`W: ${wins}`)} | ${chalk.red(`L: ${losses}`)} | Net P&L: ${pnlColor(formatCurrency(totalPnl))}\n`);
+  console.log(
+    `  ${chalk.green(`W: ${wins}`)} | ${chalk.red(`L: ${losses}`)} | Net P&L: ${pnlColor(formatCurrency(totalPnl))}\n`,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -155,17 +170,14 @@ export async function showHistory(days = 30) {
 
 function displayPerformanceStats(stats) {
   const table = new Table({
-    head: [
-      chalk.cyan('Metric'),
-      chalk.cyan('Value'),
-    ],
+    head: [chalk.cyan('Metric'), chalk.cyan('Value')],
     style: { head: [], border: ['gray'] },
     colWidths: [25, 20],
   });
 
   const totalPnl = stats.totalPnl || 0;
-  const bestPnl = stats.bestTrade ? (stats.bestTrade.pnl || 0) : 0;
-  const worstPnl = stats.worstTrade ? (stats.worstTrade.pnl || 0) : 0;
+  const bestPnl = stats.bestTrade ? stats.bestTrade.pnl || 0 : 0;
+  const worstPnl = stats.worstTrade ? stats.worstTrade.pnl || 0 : 0;
 
   table.push(
     ['Period', String(stats.period || '30 days')],
@@ -174,12 +186,21 @@ function displayPerformanceStats(stats) {
     ['Avg Win', chalk.green(formatCurrency(stats.avgWin || 0))],
     ['Avg Loss', chalk.red(formatCurrency(stats.avgLoss || 0))],
     ['Profit Factor', String(stats.profitFactor || 0)],
-    ['Total P&L', totalPnl >= 0
-      ? chalk.green(formatCurrency(totalPnl))
-      : chalk.red(formatCurrency(totalPnl))],
+    [
+      'Total P&L',
+      totalPnl >= 0
+        ? chalk.green(formatCurrency(totalPnl))
+        : chalk.red(formatCurrency(totalPnl)),
+    ],
     ['Max Drawdown', chalk.red(formatCurrency(stats.maxDrawdown || 0))],
-    ['Best Trade', `${formatCurrency(bestPnl)} ${stats.bestTrade?.symbol ? `(${stats.bestTrade.symbol})` : ''}`],
-    ['Worst Trade', `${formatCurrency(worstPnl)} ${stats.worstTrade?.symbol ? `(${stats.worstTrade.symbol})` : ''}`],
+    [
+      'Best Trade',
+      `${formatCurrency(bestPnl)} ${stats.bestTrade?.symbol ? `(${stats.bestTrade.symbol})` : ''}`,
+    ],
+    [
+      'Worst Trade',
+      `${formatCurrency(worstPnl)} ${stats.worstTrade?.symbol ? `(${stats.worstTrade.symbol})` : ''}`,
+    ],
   );
 
   console.log(chalk.bold.white('\n  Performance Stats:\n'));

@@ -8,19 +8,24 @@ import { jest } from '@jest/globals';
 function extractJson(text) {
   try {
     return JSON.parse(text);
-  } catch { /* fall through */ }
+  } catch {
+    /* fall through */
+  }
 
   const fenceMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)```/);
   if (fenceMatch) {
     try {
       return JSON.parse(fenceMatch[1].trim());
-    } catch { /* fall through */ }
+    } catch {
+      /* fall through */
+    }
   }
 
   const firstBrace = text.indexOf('{');
   const firstBracket = text.indexOf('[');
   let start = -1;
-  if (firstBrace === -1 && firstBracket === -1) throw new Error('No JSON found in response');
+  if (firstBrace === -1 && firstBracket === -1)
+    throw new Error('No JSON found in response');
   if (firstBrace === -1) start = firstBracket;
   else if (firstBracket === -1) start = firstBrace;
   else start = Math.min(firstBrace, firstBracket);

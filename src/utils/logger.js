@@ -33,7 +33,9 @@ function formatLine(level, message) {
 function writeToFile(level, message) {
   try {
     fs.appendFileSync(getLogPath(), formatLine(level, message));
-  } catch { /* silent — logging should never crash the app */ }
+  } catch {
+    /* silent — logging should never crash the app */
+  }
 }
 
 /**
@@ -87,5 +89,7 @@ export function cleanOldLogs(keepDays = 30) {
         fs.unlinkSync(filePath);
       }
     }
-  } catch { /* silent */ }
+  } catch {
+    /* silent */
+  }
 }

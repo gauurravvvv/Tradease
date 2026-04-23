@@ -1,6 +1,10 @@
 import { getQuote, getHistorical } from '../data/market.js';
 import { getStockNews } from '../data/news.js';
-import { getOptionsChain, getNearestExpiry, getATMStrike } from '../data/options.js';
+import {
+  getOptionsChain,
+  getNearestExpiry,
+  getATMStrike,
+} from '../data/options.js';
 import { analyzeStockQuick, analyzeStockDeep } from '../analysis/claude.js';
 import { analyzeTechnicals } from '../analysis/technicals.js';
 import { calculateStopLoss, calculateTargets } from '../trading/risk.js';
@@ -8,8 +12,14 @@ import { getFiiDiiData } from '../data/fii-dii.js';
 import { getGlobalCues } from '../data/global-cues.js';
 import { getSectorForStock } from '../analysis/sectors.js';
 import {
-  displayHeader, displayTradeCard, displayFiiDiiBar, formatCurrency, formatPercent,
-  formatMarketCap, formatVolume, displayConfidenceBlock,
+  displayHeader,
+  displayTradeCard,
+  displayFiiDiiBar,
+  formatCurrency,
+  formatPercent,
+  formatMarketCap,
+  formatVolume,
+  displayConfidenceBlock,
 } from './display.js';
 import ora from 'ora';
 import chalk from 'chalk';
@@ -35,16 +45,16 @@ export async function runResearch(symbol, mode = 'quick') {
 // ---------------------------------------------------------------------------
 
 async function runQuickResearch(symbol) {
-  displayHeader(`Quick Research: ${symbol}`, 'Quote + Technicals + News → AI Analysis');
+  displayHeader(
+    `Quick Research: ${symbol}`,
+    'Quote + Technicals + News → AI Analysis',
+  );
 
   const spinner = ora('Fetching data...').start();
 
   let quote, news;
   try {
-    [quote, news] = await Promise.all([
-      getQuote(symbol),
-      getStockNews(symbol),
-    ]);
+    [quote, news] = await Promise.all([getQuote(symbol), getStockNews(symbol)]);
     spinner.succeed('Data fetched');
   } catch (err) {
     spinner.fail(`Data fetch failed: ${err.message}`);
@@ -58,7 +68,9 @@ async function runQuickResearch(symbol) {
   if (news.length > 0) {
     console.log(chalk.bold.white('\n  Recent News:'));
     for (const item of news.slice(0, 5)) {
-      const date = item.pubDate ? new Date(item.pubDate).toLocaleDateString('en-IN') : '';
+      const date = item.pubDate
+        ? new Date(item.pubDate).toLocaleDateString('en-IN')
+        : '';
       console.log(chalk.gray(`    ${date}  ${item.title}`));
     }
   } else {
@@ -79,7 +91,8 @@ async function runQuickResearch(symbol) {
 
     aiSpinner.succeed('AI analysis complete');
 
-    const hasUsefulData = analysis && analysis.type && analysis.stop_loss && analysis.target1;
+    const hasUsefulData =
+      analysis && analysis.type && analysis.stop_loss && analysis.target1;
     if (hasUsefulData) {
       console.log(chalk.bold.white('\n  AI Recommendation:'));
       displayTradeCard({ symbol, ...analysis }, 1);
@@ -99,7 +112,9 @@ async function runQuickResearch(symbol) {
       displayTradeCard(fallback, 1);
       return fallback;
     }
-  } catch (e) { /* skip */ }
+  } catch (e) {
+    /* skip */
+  }
 
   console.log(chalk.yellow('\n  No recommendation available.'));
   return null;
@@ -110,7 +125,10 @@ async function runQuickResearch(symbol) {
 // ---------------------------------------------------------------------------
 
 async function runDeepResearch(symbol) {
-  displayHeader(`Deep Research: ${symbol}`, 'Full analysis: 90-day history + Options + All news');
+  displayHeader(
+    `Deep Research: ${symbol}`,
+    'Full analysis: 90-day history + Options + All news',
+  );
 
   const spinner = ora('Fetching comprehensive data...').start();
 
@@ -158,20 +176,33 @@ async function runDeepResearch(symbol) {
 
   // Show market context
   if (fiiDiiData || globalCues) {
-    console.log(chalk.bold.white('\n  MARKET CONTEXT ') + chalk.gray('\u2500'.repeat(36)));
+    console.log(
+      chalk.bold.white('\n  MARKET CONTEXT ') + chalk.gray('\u2500'.repeat(36)),
+    );
     if (fiiDiiData) {
       const fiiBar = displayFiiDiiBar(fiiDiiData);
       if (fiiBar) console.log(`  ${fiiBar}`);
     }
     if (globalCues) {
-      const sentColor = globalCues.sentiment === 'BULLISH' ? chalk.green
-        : globalCues.sentiment === 'BEARISH' ? chalk.red : chalk.yellow;
-      console.log(`  Global: ${sentColor(globalCues.sentiment)} (score: ${globalCues.sentimentScore})`);
+      const sentColor =
+        globalCues.sentiment === 'BULLISH'
+          ? chalk.green
+          : globalCues.sentiment === 'BEARISH'
+            ? chalk.red
+            : chalk.yellow;
+      console.log(
+        `  Global: ${sentColor(globalCues.sentiment)} (score: ${globalCues.sentimentScore})`,
+      );
     }
     if (sectorCtx) {
-      const trendColor = sectorCtx.trend?.includes('up') ? chalk.green
-        : sectorCtx.trend?.includes('down') ? chalk.red : chalk.yellow;
-      console.log(`  Sector: ${chalk.white(sectorCtx.sector)} #${sectorCtx.rank} ${trendColor(sectorCtx.trend || '—')} (mom: ${sectorCtx.momentumScore})`);
+      const trendColor = sectorCtx.trend?.includes('up')
+        ? chalk.green
+        : sectorCtx.trend?.includes('down')
+          ? chalk.red
+          : chalk.yellow;
+      console.log(
+        `  Sector: ${chalk.white(sectorCtx.sector)} #${sectorCtx.rank} ${trendColor(sectorCtx.trend || '—')} (mom: ${sectorCtx.momentumScore})`,
+      );
     }
   }
 
@@ -179,7 +210,9 @@ async function runDeepResearch(symbol) {
   if (news.length > 0) {
     console.log(chalk.bold.white('\n  News Feed:'));
     for (const item of news.slice(0, 10)) {
-      const date = item.pubDate ? new Date(item.pubDate).toLocaleDateString('en-IN') : '';
+      const date = item.pubDate
+        ? new Date(item.pubDate).toLocaleDateString('en-IN')
+        : '';
       console.log(chalk.gray(`    ${date}  ${item.title}`));
     }
   }
@@ -190,7 +223,9 @@ async function runDeepResearch(symbol) {
     try {
       technicals = analyzeTechnicals(history);
       displayTechnicalsSummary(technicals);
-    } catch (e) { /* skip if fails */ }
+    } catch (e) {
+      /* skip if fails */
+    }
   }
 
   // Build sector context string for AI
@@ -212,12 +247,15 @@ async function runDeepResearch(symbol) {
       news: news.map(n => ({ title: n.title, summary: n.snippet })),
       sectorContext: sectorStr,
       fiiDii: fiiDiiData ? fiiDiiData.summary : null,
-      globalSentiment: globalCues ? `${globalCues.sentiment} (${globalCues.sentimentScore})` : null,
+      globalSentiment: globalCues
+        ? `${globalCues.sentiment} (${globalCues.sentimentScore})`
+        : null,
     });
 
     aiSpinner.succeed('Deep analysis complete');
 
-    const hasUsefulData = analysis && analysis.type && analysis.stop_loss && analysis.target1;
+    const hasUsefulData =
+      analysis && analysis.type && analysis.stop_loss && analysis.target1;
     if (hasUsefulData) {
       aiSpinner.succeed('Deep analysis complete');
       console.log(chalk.bold.white('\n  AI Deep Recommendation:'));
@@ -265,7 +303,10 @@ async function runDeepResearch(symbol) {
 function displayQuoteCard(quote) {
   const changeColor = quote.changePct >= 0 ? chalk.green : chalk.red;
   const arrow = quote.changePct >= 0 ? '\u25B2' : '\u25BC';
-  const priceStr = quote.price != null ? `\u20B9${quote.price.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—';
+  const priceStr =
+    quote.price != null
+      ? `\u20B9${quote.price.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+      : '—';
 
   // Line 1: Symbol + price + change + volume
   const volStr = quote.volume != null ? formatVolume(quote.volume) : '';
@@ -273,13 +314,17 @@ function displayQuoteCard(quote) {
     ? ` (${(quote.volume / quote.avgVolume).toFixed(1)}x avg)`
     : '';
   const volPart = volStr ? `  Vol: ${volStr}${avgVolStr}` : '';
-  console.log(`\n  ${chalk.bold.white(quote.symbol)}  ${chalk.bold(priceStr)}  ${changeColor(`${arrow} ${formatPercent(quote.changePct)}`)}${chalk.gray(volPart)}`);
+  console.log(
+    `\n  ${chalk.bold.white(quote.symbol)}  ${chalk.bold(priceStr)}  ${changeColor(`${arrow} ${formatPercent(quote.changePct)}`)}${chalk.gray(volPart)}`,
+  );
 
   // Line 2: OHLC + prev close — compact horizontal
   const o = quote.open ? `O: ${quote.open.toLocaleString('en-IN')}` : '';
   const h = quote.dayHigh ? `H: ${quote.dayHigh.toLocaleString('en-IN')}` : '';
   const l = quote.dayLow ? `L: ${quote.dayLow.toLocaleString('en-IN')}` : '';
-  const pc = quote.previousClose ? `PC: ${quote.previousClose.toLocaleString('en-IN')}` : '';
+  const pc = quote.previousClose
+    ? `PC: ${quote.previousClose.toLocaleString('en-IN')}`
+    : '';
   const ohlcParts = [o, h, l, pc].filter(Boolean);
   if (ohlcParts.length > 0) {
     console.log(chalk.gray(`  ${ohlcParts.join('  ')}`));
@@ -290,9 +335,12 @@ function displayQuoteCard(quote) {
   if (quote.pe != null) fundParts.push(`PE: ${quote.pe.toFixed(1)}`);
   if (quote.eps != null) fundParts.push(`EPS: \u20B9${quote.eps.toFixed(0)}`);
   if (quote.week52Low != null && quote.week52High != null) {
-    fundParts.push(`52W: \u20B9${quote.week52Low.toLocaleString('en-IN')}-\u20B9${quote.week52High.toLocaleString('en-IN')}`);
+    fundParts.push(
+      `52W: \u20B9${quote.week52Low.toLocaleString('en-IN')}-\u20B9${quote.week52High.toLocaleString('en-IN')}`,
+    );
   }
-  if (quote.marketCap != null) fundParts.push(`MCap: ${formatMarketCap(quote.marketCap)}`);
+  if (quote.marketCap != null)
+    fundParts.push(`MCap: ${formatMarketCap(quote.marketCap)}`);
   if (fundParts.length > 0) {
     console.log(chalk.cyan(`  ${fundParts.join('  ')}`));
   }
@@ -315,11 +363,20 @@ function displayHistorySummary(history, symbol) {
   const last10 = closes.slice(-10);
   const first10Avg = first10.reduce((a, b) => a + b, 0) / first10.length;
   const last10Avg = last10.reduce((a, b) => a + b, 0) / last10.length;
-  const trend = last10Avg > first10Avg ? chalk.green('\u2191 UPTREND') : chalk.red('\u2193 DOWNTREND');
+  const trend =
+    last10Avg > first10Avg
+      ? chalk.green('\u2191 UPTREND')
+      : chalk.red('\u2193 DOWNTREND');
 
-  console.log(chalk.bold.white(`\n  90D PRICE `) + chalk.gray('\u2500'.repeat(42)));
-  console.log(`  H: ${chalk.green(formatCurrency(max))}  L: ${chalk.red(formatCurrency(min))}  Avg: ${chalk.white(formatCurrency(avg))}  ${trend}`);
-  console.log(`  Range: ${chalk.white(((max - min) / min * 100).toFixed(1) + '%')}  From avg: ${formatPercent((current - avg) / avg * 100)}`);
+  console.log(
+    chalk.bold.white(`\n  90D PRICE `) + chalk.gray('\u2500'.repeat(42)),
+  );
+  console.log(
+    `  H: ${chalk.green(formatCurrency(max))}  L: ${chalk.red(formatCurrency(min))}  Avg: ${chalk.white(formatCurrency(avg))}  ${trend}`,
+  );
+  console.log(
+    `  Range: ${chalk.white((((max - min) / min) * 100).toFixed(1) + '%')}  From avg: ${formatPercent(((current - avg) / avg) * 100)}`,
+  );
 }
 
 /**
@@ -332,7 +389,10 @@ function displayOptionsSnapshot(options) {
     ? new Date(options.expirationDate).toLocaleDateString('en-IN')
     : '—';
 
-  console.log(chalk.bold.white(`\n  OPTIONS `) + chalk.gray(`(Exp: ${expiry}) ` + '\u2500'.repeat(35)));
+  console.log(
+    chalk.bold.white(`\n  OPTIONS `) +
+      chalk.gray(`(Exp: ${expiry}) ` + '\u2500'.repeat(35)),
+  );
 
   // Top 3 by OI
   const topCalls = (options.calls || [])
@@ -346,26 +406,38 @@ function displayOptionsSnapshot(options) {
     .slice(0, 3);
 
   if (topCalls.length > 0) {
-    const callStrs = topCalls.map(c =>
-      `${c.strike} OI:${(c.openInterest || 0).toLocaleString('en-IN')} IV:${((c.impliedVolatility || 0) * 100).toFixed(0)}%`
+    const callStrs = topCalls.map(
+      c =>
+        `${c.strike} OI:${(c.openInterest || 0).toLocaleString('en-IN')} IV:${((c.impliedVolatility || 0) * 100).toFixed(0)}%`,
     );
-    console.log(`  ${chalk.green('CE:')} ${chalk.gray(callStrs.join('  |  '))}`);
+    console.log(
+      `  ${chalk.green('CE:')} ${chalk.gray(callStrs.join('  |  '))}`,
+    );
   }
 
   if (topPuts.length > 0) {
-    const putStrs = topPuts.map(p =>
-      `${p.strike} OI:${(p.openInterest || 0).toLocaleString('en-IN')} IV:${((p.impliedVolatility || 0) * 100).toFixed(0)}%`
+    const putStrs = topPuts.map(
+      p =>
+        `${p.strike} OI:${(p.openInterest || 0).toLocaleString('en-IN')} IV:${((p.impliedVolatility || 0) * 100).toFixed(0)}%`,
     );
     console.log(`  ${chalk.red('PE:')} ${chalk.gray(putStrs.join('  |  '))}`);
   }
 
   // PCR line
-  const totalCallOI = (options.calls || []).reduce((sum, c) => sum + (c.openInterest || 0), 0);
-  const totalPutOI = (options.puts || []).reduce((sum, p) => sum + (p.openInterest || 0), 0);
+  const totalCallOI = (options.calls || []).reduce(
+    (sum, c) => sum + (c.openInterest || 0),
+    0,
+  );
+  const totalPutOI = (options.puts || []).reduce(
+    (sum, p) => sum + (p.openInterest || 0),
+    0,
+  );
   const pcr = totalCallOI > 0 ? (totalPutOI / totalCallOI).toFixed(2) : '—';
   const pcrColor = pcr > 1 ? chalk.green : pcr < 0.7 ? chalk.red : chalk.yellow;
 
-  console.log(`  PCR: ${pcrColor(pcr)}  CallOI: ${chalk.gray(totalCallOI.toLocaleString('en-IN'))}  PutOI: ${chalk.gray(totalPutOI.toLocaleString('en-IN'))}`);
+  console.log(
+    `  PCR: ${pcrColor(pcr)}  CallOI: ${chalk.gray(totalCallOI.toLocaleString('en-IN'))}  PutOI: ${chalk.gray(totalPutOI.toLocaleString('en-IN'))}`,
+  );
 }
 
 /**
@@ -379,36 +451,68 @@ function displayOptionsSnapshot(options) {
  *   Signal: ████████░░ NEUTRAL (43/100)
  */
 function displayTechnicalsSummary(t) {
-  console.log(chalk.bold.white('\n  TECHNICALS ') + chalk.gray('\u2500'.repeat(40)));
+  console.log(
+    chalk.bold.white('\n  TECHNICALS ') + chalk.gray('\u2500'.repeat(40)),
+  );
 
   // Line 1: RSI + MACD + ATR
-  const rsiColor = t.rsi.signal === 'overbought' ? chalk.red : t.rsi.signal === 'oversold' ? chalk.green : chalk.yellow;
-  const macdArrow = t.macd.trend?.includes('bullish') ? chalk.green('\u2191 bullish') : t.macd.trend?.includes('bearish') ? chalk.red('\u2193 bearish') : chalk.yellow(t.macd.trend || '\u2194');
-  const atrStr = t.atr.value != null ? `${t.atr.value.toFixed(0)} (${t.atr.percentage?.toFixed(1) || '—'}%)` : '—';
+  const rsiColor =
+    t.rsi.signal === 'overbought'
+      ? chalk.red
+      : t.rsi.signal === 'oversold'
+        ? chalk.green
+        : chalk.yellow;
+  const macdArrow = t.macd.trend?.includes('bullish')
+    ? chalk.green('\u2191 bullish')
+    : t.macd.trend?.includes('bearish')
+      ? chalk.red('\u2193 bearish')
+      : chalk.yellow(t.macd.trend || '\u2194');
+  const atrStr =
+    t.atr.value != null
+      ? `${t.atr.value.toFixed(0)} (${t.atr.percentage?.toFixed(1) || '—'}%)`
+      : '—';
 
-  console.log(`  RSI: ${rsiColor(`${t.rsi.value?.toFixed(0)} [${t.rsi.signal}]`)}  ${chalk.gray('|')}  MACD: ${macdArrow}  ${chalk.gray('|')}  ATR: ${chalk.white(atrStr)}`);
+  console.log(
+    `  RSI: ${rsiColor(`${t.rsi.value?.toFixed(0)} [${t.rsi.signal}]`)}  ${chalk.gray('|')}  MACD: ${macdArrow}  ${chalk.gray('|')}  ATR: ${chalk.white(atrStr)}`,
+  );
 
   // Line 2: Volume + trend
-  const volSignalColor = t.volume.signal === 'surge' || t.volume.signal === 'high' ? chalk.green : t.volume.signal === 'low' ? chalk.red : chalk.yellow;
+  const volSignalColor =
+    t.volume.signal === 'surge' || t.volume.signal === 'high'
+      ? chalk.green
+      : t.volume.signal === 'low'
+        ? chalk.red
+        : chalk.yellow;
   const volStr = `${t.volume.ratio?.toFixed(1) || '—'}x avg [${t.volume.signal}]`;
 
   const sma20 = t.sma.sma20;
   const sma50 = t.sma.sma50;
   let trendStr = '';
   if (sma20 != null && sma50 != null) {
-    trendStr = sma20 > sma50
-      ? chalk.green('SMA20>50 \u2191')
-      : chalk.red('SMA20<50 \u2193');
+    trendStr =
+      sma20 > sma50
+        ? chalk.green('SMA20>50 \u2191')
+        : chalk.red('SMA20<50 \u2193');
   }
 
-  console.log(`  Volume: ${volSignalColor(volStr)}  ${chalk.gray('|')}  Trend: ${trendStr}`);
+  console.log(
+    `  Volume: ${volSignalColor(volStr)}  ${chalk.gray('|')}  Trend: ${trendStr}`,
+  );
 
   // Line 3: Support + Resistance
   const supports = (t.supportResistance?.supports || []).slice(0, 3);
   const resistances = (t.supportResistance?.resistances || []).slice(0, 3);
-  const supStr = supports.length > 0 ? supports.map(s => chalk.green(`\u20B9${s.toFixed(0)}`)).join('  ') : '—';
-  const resStr = resistances.length > 0 ? resistances.map(r => chalk.red(`\u20B9${r.toFixed(0)}`)).join('  ') : '—';
-  console.log(`  Support: ${supStr}  ${chalk.gray('|')}  Resistance: ${resStr}`);
+  const supStr =
+    supports.length > 0
+      ? supports.map(s => chalk.green(`\u20B9${s.toFixed(0)}`)).join('  ')
+      : '—';
+  const resStr =
+    resistances.length > 0
+      ? resistances.map(r => chalk.red(`\u20B9${r.toFixed(0)}`)).join('  ')
+      : '—';
+  console.log(
+    `  Support: ${supStr}  ${chalk.gray('|')}  Resistance: ${resStr}`,
+  );
 
   // Line 4: Fibonacci levels (if present)
   if (t.fibonacci) {
@@ -433,25 +537,52 @@ function displayTechnicalsSummary(t) {
 
   // Line 6: Overall signal with confidence block
   const signal = t.overallSignal;
-  const sigColor = signal.includes('BUY') ? chalk.green : signal.includes('SELL') ? chalk.red : chalk.yellow;
+  const sigColor = signal.includes('BUY')
+    ? chalk.green
+    : signal.includes('SELL')
+      ? chalk.red
+      : chalk.yellow;
   const score = t.score || 0;
-  console.log(`  Signal: ${displayConfidenceBlock(score)} ${sigColor(signal)} (${score}/100)`);
+  console.log(
+    `  Signal: ${displayConfidenceBlock(score)} ${sigColor(signal)} (${score}/100)`,
+  );
 }
 
 function buildFallbackRecommendation(symbol, quote, technicals) {
   const { overallSignal } = technicals;
-  const type = overallSignal.includes('BUY') ? 'CALL' : overallSignal.includes('SELL') ? 'PUT' : 'NEUTRAL';
+  const type = overallSignal.includes('BUY')
+    ? 'CALL'
+    : overallSignal.includes('SELL')
+      ? 'PUT'
+      : 'NEUTRAL';
   const atr = technicals.atr?.value || quote.price * 0.02;
-  const sl = calculateStopLoss(quote.price, atr, type === 'NEUTRAL' ? 'CALL' : type);
-  const targets = calculateTargets(quote.price, sl, type === 'NEUTRAL' ? 'CALL' : type);
+  const sl = calculateStopLoss(
+    quote.price,
+    atr,
+    type === 'NEUTRAL' ? 'CALL' : type,
+  );
+  const targets = calculateTargets(
+    quote.price,
+    sl,
+    type === 'NEUTRAL' ? 'CALL' : type,
+  );
   const expiry = getNearestExpiry();
-  const stepSize = quote.price > 5000 ? 100 : quote.price > 1000 ? 50 : quote.price > 500 ? 25 : 10;
+  const stepSize =
+    quote.price > 5000
+      ? 100
+      : quote.price > 1000
+        ? 50
+        : quote.price > 500
+          ? 25
+          : 10;
   const strike = getATMStrike(quote.price, stepSize);
 
   const reasons = [];
-  if (technicals.rsi?.signal !== 'neutral') reasons.push(`RSI ${technicals.rsi.signal}`);
+  if (technicals.rsi?.signal !== 'neutral')
+    reasons.push(`RSI ${technicals.rsi.signal}`);
   if (technicals.macd?.trend) reasons.push(`MACD ${technicals.macd.trend}`);
-  if (technicals.volume?.signal !== 'normal') reasons.push(`Volume ${technicals.volume.signal}`);
+  if (technicals.volume?.signal !== 'normal')
+    reasons.push(`Volume ${technicals.volume.signal}`);
 
   return {
     symbol,

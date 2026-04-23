@@ -1,13 +1,19 @@
 import { BaseAgent } from './base.js';
 import { getOpenTrades, enterTrade } from '../trading/manager.js';
 import { getPortfolioSummary } from '../trading/portfolio.js';
-import { calculateStopLoss, calculateTargets, calculatePositionSize, validateTrade } from '../trading/risk.js';
+import {
+  calculateStopLoss,
+  calculateTargets,
+  calculatePositionSize,
+  validateTrade,
+} from '../trading/risk.js';
 import { getQuote, getHistorical } from '../data/market.js';
 import { computeATR } from '../analysis/technicals.js';
 import { screenStocks } from '../analysis/screener.js';
 import { computeConfluence } from '../analysis/confluence.js';
 import { notifyTradeEntry } from '../utils/notify.js';
 import { logger } from '../utils/logger.js';
+import { TRADING } from '../config/settings.js';
 
 const TEN_MINUTES = 10 * 60 * 1000;
 const SCORE_AUTO_ENTER = 70;
@@ -16,7 +22,6 @@ const SCORE_BORDERLINE_MAX = 69;
 const RSI_CALL_MAX = 75;
 const RSI_PUT_MIN = 25;
 const MIN_VOLUME_RATIO = 1.0;
-const MAX_POSITIONS = 3;
 
 export class TradeStrategist extends BaseAgent {
   constructor() {
@@ -32,7 +37,7 @@ export class TradeStrategist extends BaseAgent {
     if (!this.isMarketHours(9, 30, 14, 30)) return false;
 
     const open = getOpenTrades();
-    if (open.length >= MAX_POSITIONS) {
+    if (open.length >= TRADING.MAX_POSITIONS) {
       this.log('skip', null, `${open.length} positions open`);
       return false;
     }
@@ -67,7 +72,7 @@ export class TradeStrategist extends BaseAgent {
       if (entered > 0) break; // one entry per tick
 
       const open = getOpenTrades();
-      if (open.length >= MAX_POSITIONS) break;
+      if (open.length >= TRADING.MAX_POSITIONS) break;
 
       const rec = stock.recommendation;
       if (rec !== 'CALL' && rec !== 'PUT') continue;
@@ -75,7 +80,8 @@ export class TradeStrategist extends BaseAgent {
       const score = stock.score;
       const hasNews = !!newsMap[stock.symbol];
       const rsi = stock.technicals?.rsi?.value ?? stock.technicals?.rsi;
-      const volumeRatio = stock.technicals?.volume?.ratio ?? stock.technicals?.volumeRatio ?? 0;
+      const volumeRatio =
+        stock.technicals?.volume?.ratio ?? stock.technicals?.volumeRatio ?? 0;
 
       // RSI filter
       if (rec === 'CALL' && rsi != null && rsi >= RSI_CALL_MAX) continue;
@@ -91,11 +97,17 @@ export class TradeStrategist extends BaseAgent {
           const conf = await computeConfluence(stock.symbol, rec);
           confluenceScore = conf.score;
         }
-      } catch { /* proceed without confluence */ }
+      } catch {
+        /* proceed without confluence */
+      }
 
       // Skip if confluence too low (signals disagree across timeframes)
       if (confluenceScore < 40) {
-        this.log('skip_confluence', stock.symbol, `confluence=${confluenceScore} too low`);
+        this.log(
+          'skip_confluence',
+          stock.symbol,
+          `confluence=${confluenceScore} too low`,
+        );
         continue;
       }
 
@@ -104,7 +116,13 @@ export class TradeStrategist extends BaseAgent {
 
       // ── High-confidence: rule-based auto-enter ──
       if (score >= effectiveThreshold) {
-        const result = await this._enterPosition(stock, rec, score, hasNews, `rule|conf:${confluenceScore}`);
+        const result = await this._enterPosition(
+          stock,
+          rec,
+          score,
+          hasNews,
+          `rule|conf:${confluenceScore}`,
+        );
         if (result) {
           entered++;
           if (hasNews) consumedIds.push(newsMap[stock.symbol].id);
@@ -113,10 +131,23 @@ export class TradeStrategist extends BaseAgent {
       }
 
       // ── Borderline: only if news signal exists, ask Claude ──
-      if (score >= SCORE_BORDERLINE_MIN && score <= SCORE_BORDERLINE_MAX && hasNews) {
-        const approved = await this._claudeConfirm(stock, newsMap[stock.symbol]);
+      if (
+        score >= SCORE_BORDERLINE_MIN &&
+        score <= SCORE_BORDERLINE_MAX &&
+        hasNews
+      ) {
+        const approved = await this._claudeConfirm(
+          stock,
+          newsMap[stock.symbol],
+        );
         if (approved) {
-          const result = await this._enterPosition(stock, rec, score, true, 'claude_confirmed');
+          const result = await this._enterPosition(
+            stock,
+            rec,
+            score,
+            true,
+            'claude_confirmed',
+          );
           if (result) entered++;
         }
         consumedIds.push(newsMap[stock.symbol].id);
@@ -147,7 +178,9 @@ export class TradeStrategist extends BaseAgent {
       const portfolio = getPortfolioSummary();
       const lotSize = stock.lotSize;
       const { lots, capitalRequired, maxLoss } = calculatePositionSize(
-        portfolio.availableCapital, entryPrice, lotSize,
+        portfolio.availableCapital,
+        entryPrice,
+        lotSize,
       );
 
       if (lots <= 0) {
@@ -173,7 +206,8 @@ export class TradeStrategist extends BaseAgent {
       if (hasNews) confidence = Math.min(confidence + 10, 100);
 
       const rsiVal = stock.technicals?.rsi?.value ?? stock.technicals?.rsi;
-      const volVal = stock.technicals?.volume?.ratio ?? stock.technicals?.volumeRatio;
+      const volVal =
+        stock.technicals?.volume?.ratio ?? stock.technicals?.volumeRatio;
       const reason = `[Agent] ${source} | score:${score} | RSI:${rsiVal?.toFixed?.(1) ?? '--'} | vol:${volVal?.toFixed?.(1) ?? '--'}x${hasNews ? ' | news_boost' : ''}`;
 
       const trade = enterTrade({
@@ -200,13 +234,19 @@ export class TradeStrategist extends BaseAgent {
       });
 
       this.log('entry', stock.symbol, reason);
-      try { notifyTradeEntry(stock.symbol, type, entryPrice); } catch {}
+      try {
+        notifyTradeEntry(stock.symbol, type, entryPrice);
+      } catch {}
 
-      logger.info(`[trade-strategist] Entered ${type} on ${stock.symbol} @ ₹${entryPrice} | SL:₹${stopLoss} | T1:₹${target1} | T2:₹${target2}`);
+      logger.info(
+        `[trade-strategist] Entered ${type} on ${stock.symbol} @ ₹${entryPrice} | SL:₹${stopLoss} | T1:₹${target1} | T2:₹${target2}`,
+      );
       return true;
     } catch (err) {
       this.log('entry_error', stock.symbol, err.message);
-      logger.error(`[trade-strategist] Entry failed ${stock.symbol}: ${err.message}`);
+      logger.error(
+        `[trade-strategist] Entry failed ${stock.symbol}: ${err.message}`,
+      );
       return false;
     }
   }
@@ -217,9 +257,10 @@ export class TradeStrategist extends BaseAgent {
    */
   async _claudeConfirm(stock, newsSignal) {
     try {
-      const newsData = typeof newsSignal.data === 'string'
-        ? JSON.parse(newsSignal.data)
-        : newsSignal.data;
+      const newsData =
+        typeof newsSignal.data === 'string'
+          ? JSON.parse(newsSignal.data)
+          : newsSignal.data;
 
       const prompt = `F&O entry decision. Respond ONLY with JSON: {"enter":true/false,"reason":"<10 words>"}
 
@@ -235,7 +276,11 @@ Enter this ${stock.recommendation} trade?`;
 
       const raw = await this.callClaude(prompt);
       const parsed = this.parseJson(raw);
-      this.log('claude_confirm', stock.symbol, `enter:${parsed.enter} reason:${parsed.reason}`);
+      this.log(
+        'claude_confirm',
+        stock.symbol,
+        `enter:${parsed.enter} reason:${parsed.reason}`,
+      );
       return !!parsed.enter;
     } catch (err) {
       this.log('claude_error', stock.symbol, err.message);
@@ -248,7 +293,7 @@ Enter this ${stock.recommendation} trade?`;
    */
   async _getScreenerResults() {
     const now = Date.now();
-    if (this._screenerCache && (now - this._screenerCacheTs) < TEN_MINUTES) {
+    if (this._screenerCache && now - this._screenerCacheTs < TEN_MINUTES) {
       return this._screenerCache;
     }
 

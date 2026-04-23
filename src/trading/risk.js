@@ -1,18 +1,5 @@
 import { TRADING } from '../config/settings.js';
 
-const {
-  MAX_CAPITAL_PER_POSITION,
-  MAX_POSITIONS,
-  MAX_LOSS_PER_TRADE,
-  ATR_STOP_MULTIPLIER,
-  TRAILING_STOP_ATR,
-  TRAILING_TRIGGER_PCT,
-  RISK_REWARD,
-  NO_NEW_ENTRY_AFTER,
-  PROFIT_BOOKING,
-  ADAPTIVE_TRAIL,
-} = TRADING;
-
 /**
  * Calculate position size based on capital, price, and lot size.
  * @param {number} capital - Total available capital
@@ -21,7 +8,7 @@ const {
  * @returns {{ lots: number, capitalRequired: number, maxLoss: number }}
  */
 export function calculatePositionSize(capital, price, lotSize) {
-  const maxCapital = capital * MAX_CAPITAL_PER_POSITION;
+  const maxCapital = capital * TRADING.MAX_CAPITAL_PER_POSITION;
   const oneLotCost = price * lotSize;
 
   if (oneLotCost <= 0) {
@@ -30,7 +17,7 @@ export function calculatePositionSize(capital, price, lotSize) {
 
   const lots = Math.floor(maxCapital / oneLotCost);
   const capitalRequired = lots * oneLotCost;
-  const maxLoss = capital * MAX_LOSS_PER_TRADE;
+  const maxLoss = capital * TRADING.MAX_LOSS_PER_TRADE;
 
   return {
     lots,
@@ -49,10 +36,14 @@ export function calculatePositionSize(capital, price, lotSize) {
 export function calculateStopLoss(entryPrice, atr, type) {
   if (!atr || !entryPrice) return null;
   if (type === 'CALL') {
-    return Math.round((entryPrice - atr * ATR_STOP_MULTIPLIER) * 100) / 100;
+    return (
+      Math.round((entryPrice - atr * TRADING.ATR_STOP_MULTIPLIER) * 100) / 100
+    );
   }
   // PUT
-  return Math.round((entryPrice + atr * ATR_STOP_MULTIPLIER) * 100) / 100;
+  return (
+    Math.round((entryPrice + atr * TRADING.ATR_STOP_MULTIPLIER) * 100) / 100
+  );
 }
 
 /**
@@ -68,12 +59,12 @@ export function calculateTargets(entryPrice, stopLoss, type) {
   let target1, target2;
 
   if (type === 'CALL') {
-    target1 = entryPrice + risk * RISK_REWARD.T1;
-    target2 = entryPrice + risk * RISK_REWARD.T2;
+    target1 = entryPrice + risk * TRADING.RISK_REWARD.T1;
+    target2 = entryPrice + risk * TRADING.RISK_REWARD.T2;
   } else {
     // PUT
-    target1 = entryPrice - risk * RISK_REWARD.T1;
-    target2 = entryPrice - risk * RISK_REWARD.T2;
+    target1 = entryPrice - risk * TRADING.RISK_REWARD.T1;
+    target2 = entryPrice - risk * TRADING.RISK_REWARD.T2;
   }
 
   return {
@@ -91,27 +82,29 @@ export function calculateTargets(entryPrice, stopLoss, type) {
  * @returns {number} ATR multiplier
  */
 function computeMomentumMultiplier(momentum, type) {
-  if (!momentum || !ADAPTIVE_TRAIL) return TRAILING_STOP_ATR;
+  if (!momentum || !TRADING.ADAPTIVE_TRAIL) return TRADING.TRAILING_STOP_ATR;
 
   const { rsi, macdHistogram, macdPrevHistogram } = momentum;
 
   // Exhaustion: RSI extreme for trade direction
-  if (type === 'CALL' && rsi != null && rsi > 75) return ADAPTIVE_TRAIL.EXHAUSTION_MULTIPLIER;
-  if (type === 'PUT' && rsi != null && rsi < 25) return ADAPTIVE_TRAIL.EXHAUSTION_MULTIPLIER;
+  if (type === 'CALL' && rsi != null && rsi > 75)
+    return TRADING.ADAPTIVE_TRAIL.EXHAUSTION_MULTIPLIER;
+  if (type === 'PUT' && rsi != null && rsi < 25)
+    return TRADING.ADAPTIVE_TRAIL.EXHAUSTION_MULTIPLIER;
 
   const macdExpanding = Math.abs(macdHistogram) > Math.abs(macdPrevHistogram);
   const macdDirection = type === 'CALL' ? macdHistogram > 0 : macdHistogram < 0;
 
   // Strong trend: MACD expanding in trade direction + RSI mid-range
   if (macdExpanding && macdDirection && rsi != null && rsi > 40 && rsi < 60) {
-    return ADAPTIVE_TRAIL.STRONG_MULTIPLIER;
+    return TRADING.ADAPTIVE_TRAIL.STRONG_MULTIPLIER;
   }
 
   // Normal trend: MACD in trade direction
-  if (macdDirection) return ADAPTIVE_TRAIL.NORMAL_MULTIPLIER;
+  if (macdDirection) return TRADING.ADAPTIVE_TRAIL.NORMAL_MULTIPLIER;
 
   // Weakening: MACD against trade direction or contracting
-  return ADAPTIVE_TRAIL.WEAK_MULTIPLIER;
+  return TRADING.ADAPTIVE_TRAIL.WEAK_MULTIPLIER;
 }
 
 /**
@@ -123,14 +116,21 @@ function computeMomentumMultiplier(momentum, type) {
  * @param {{ rsi: number, macdHistogram: number, macdPrevHistogram: number }|null} momentum
  * @returns {number|null} Trailing stop price, or null if not yet triggered
  */
-export function calculateTrailingStop(entryPrice, currentPrice, atr, type, momentum = null) {
+export function calculateTrailingStop(
+  entryPrice,
+  currentPrice,
+  atr,
+  type,
+  momentum = null,
+) {
   if (!entryPrice || !atr) return null;
 
-  const profitPct = type === 'CALL'
-    ? ((currentPrice - entryPrice) / entryPrice) * 100
-    : ((entryPrice - currentPrice) / entryPrice) * 100;
+  const profitPct =
+    type === 'CALL'
+      ? ((currentPrice - entryPrice) / entryPrice) * 100
+      : ((entryPrice - currentPrice) / entryPrice) * 100;
 
-  if (profitPct < TRAILING_TRIGGER_PCT) {
+  if (profitPct < TRADING.TRAILING_TRIGGER_PCT) {
     return null;
   }
 
@@ -150,8 +150,11 @@ export function calculateTrailingStop(entryPrice, currentPrice, atr, type, momen
  */
 export function validateTrade(trade, portfolio) {
   // Check max positions
-  if (portfolio.positions.length >= MAX_POSITIONS) {
-    return { valid: false, reason: `Max positions (${MAX_POSITIONS}) already open` };
+  if (portfolio.positions.length >= TRADING.MAX_POSITIONS) {
+    return {
+      valid: false,
+      reason: `Max positions (${TRADING.MAX_POSITIONS}) already open`,
+    };
   }
 
   // Check capital available
@@ -164,7 +167,7 @@ export function validateTrade(trade, portfolio) {
   }
 
   // Check max loss per trade not exceeded
-  const maxAllowedLoss = portfolio.totalCapital * MAX_LOSS_PER_TRADE;
+  const maxAllowedLoss = portfolio.totalCapital * TRADING.MAX_LOSS_PER_TRADE;
   if (trade.maxLoss && trade.maxLoss > maxAllowedLoss) {
     return {
       valid: false,
@@ -173,20 +176,31 @@ export function validateTrade(trade, portfolio) {
   }
 
   // Check not already in same symbol
-  const alreadyInSymbol = portfolio.positions.some(p => p.symbol === trade.symbol);
+  const alreadyInSymbol = portfolio.positions.some(
+    p => p.symbol === trade.symbol,
+  );
   if (alreadyInSymbol) {
-    return { valid: false, reason: `Already have open position in ${trade.symbol}` };
+    return {
+      valid: false,
+      reason: `Already have open position in ${trade.symbol}`,
+    };
   }
 
   // Check market hours — no new entries after NO_NEW_ENTRY_AFTER (IST)
   const now = new Date();
-  const ist = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
-  const [cutoffHour, cutoffMin] = NO_NEW_ENTRY_AFTER.split(':').map(Number);
+  const ist = new Date(
+    now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }),
+  );
+  const [cutoffHour, cutoffMin] =
+    TRADING.NO_NEW_ENTRY_AFTER.split(':').map(Number);
   const currentMinutes = ist.getHours() * 60 + ist.getMinutes();
   const cutoffMinutes = cutoffHour * 60 + cutoffMin;
 
   if (currentMinutes >= cutoffMinutes) {
-    return { valid: false, reason: `No new entries after ${NO_NEW_ENTRY_AFTER}` };
+    return {
+      valid: false,
+      reason: `No new entries after ${TRADING.NO_NEW_ENTRY_AFTER}`,
+    };
   }
 
   return { valid: true, reason: null };
@@ -204,54 +218,88 @@ export function shouldExit(trade, currentPrice, atr) {
 
   // Check stop-loss hit
   if (type === 'CALL' && currentPrice <= stopLoss) {
-    return { shouldExit: true, reason: `Stop-loss hit at ₹${stopLoss}`, action: 'FULL_EXIT' };
+    return {
+      shouldExit: true,
+      reason: `Stop-loss hit at ₹${stopLoss}`,
+      action: 'FULL_EXIT',
+    };
   }
   if (type === 'PUT' && currentPrice >= stopLoss) {
-    return { shouldExit: true, reason: `Stop-loss hit at ₹${stopLoss}`, action: 'FULL_EXIT' };
+    return {
+      shouldExit: true,
+      reason: `Stop-loss hit at ₹${stopLoss}`,
+      action: 'FULL_EXIT',
+    };
   }
 
   // Check trailing stop (skip if no ATR data)
-  const trailingStop = atr ? calculateTrailingStop(entryPrice, currentPrice, atr, type) : null;
+  const trailingStop = atr
+    ? calculateTrailingStop(entryPrice, currentPrice, atr, type)
+    : null;
   if (trailingStop != null) {
     if (type === 'CALL' && currentPrice <= trailingStop) {
-      return { shouldExit: true, reason: `Trailing stop hit at ₹${trailingStop}`, action: 'FULL_EXIT' };
+      return {
+        shouldExit: true,
+        reason: `Trailing stop hit at ₹${trailingStop}`,
+        action: 'FULL_EXIT',
+      };
     }
     if (type === 'PUT' && currentPrice >= trailingStop) {
-      return { shouldExit: true, reason: `Trailing stop hit at ₹${trailingStop}`, action: 'FULL_EXIT' };
+      return {
+        shouldExit: true,
+        reason: `Trailing stop hit at ₹${trailingStop}`,
+        action: 'FULL_EXIT',
+      };
     }
   }
 
   // Check target2 hit (exit remaining runner portion)
   if (target2) {
     if (type === 'CALL' && currentPrice >= target2) {
-      return { shouldExit: true, reason: `Target 2 hit at ₹${target2}`, action: 'PARTIAL_T2' };
+      return {
+        shouldExit: true,
+        reason: `Target 2 hit at ₹${target2}`,
+        action: 'PARTIAL_T2',
+      };
     }
     if (type === 'PUT' && currentPrice <= target2) {
-      return { shouldExit: true, reason: `Target 2 hit at ₹${target2}`, action: 'PARTIAL_T2' };
+      return {
+        shouldExit: true,
+        reason: `Target 2 hit at ₹${target2}`,
+        action: 'PARTIAL_T2',
+      };
     }
   }
 
   // Check target1 hit (partial exit if not already done)
   if (target1 && !trade.t1_hit) {
     if (type === 'CALL' && currentPrice >= target1) {
-      return { shouldExit: true, reason: `Target 1 hit at ₹${target1}`, action: 'PARTIAL_T1' };
+      return {
+        shouldExit: true,
+        reason: `Target 1 hit at ₹${target1}`,
+        action: 'PARTIAL_T1',
+      };
     }
     if (type === 'PUT' && currentPrice <= target1) {
-      return { shouldExit: true, reason: `Target 1 hit at ₹${target1}`, action: 'PARTIAL_T1' };
+      return {
+        shouldExit: true,
+        reason: `Target 1 hit at ₹${target1}`,
+        action: 'PARTIAL_T1',
+      };
     }
   }
 
   // Check max loss breached (percentage-based safety net)
   const pnlPct = entryPrice
-    ? (type === 'CALL'
+    ? type === 'CALL'
       ? ((currentPrice - entryPrice) / entryPrice) * 100
-      : ((entryPrice - currentPrice) / entryPrice) * 100)
+      : ((entryPrice - currentPrice) / entryPrice) * 100
     : 0;
 
-  if (pnlPct <= -(MAX_LOSS_PER_TRADE * 100)) {
+  if (pnlPct <= -(TRADING.MAX_LOSS_PER_TRADE * 100)) {
     return {
       shouldExit: true,
-      reason: `Max loss threshold (${MAX_LOSS_PER_TRADE * 100}%) breached`,
+      reason: `Max loss threshold (${TRADING.MAX_LOSS_PER_TRADE * 100}%) breached`,
       action: 'FULL_EXIT',
     };
   }

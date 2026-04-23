@@ -16,10 +16,21 @@ describe('Screener scoring algorithm', () => {
   // Replicate the scoring weights for testing
   function computeTestScore(params) {
     const {
-      volRatio = 1, techScore = 50, rsiSignal = 'neutral', macdTrend = 'neutral',
-      supports = [], resistances = [], price = 100, newsCount = 0,
-      sectorMomentum = 0, sectorRank = 6, fiiSignal = null, diiSignal = null,
-      fiiSentiment = null, globalSentiment = 0, vixPrice = 18,
+      volRatio = 1,
+      techScore = 50,
+      rsiSignal = 'neutral',
+      macdTrend = 'neutral',
+      supports = [],
+      resistances = [],
+      price = 100,
+      newsCount = 0,
+      sectorMomentum = 0,
+      sectorRank = 6,
+      fiiSignal = null,
+      diiSignal = null,
+      fiiSentiment = null,
+      globalSentiment = 0,
+      vixPrice = 18,
     } = params;
 
     const volumeSurge = Math.min(volRatio / 3, 1) * 12;
@@ -37,13 +48,23 @@ describe('Screener scoring algorithm', () => {
     if (price > 0) {
       for (const s of supports) {
         const dist = Math.abs(price - s) / price;
-        if (dist < 0.03) { proximityScore += 5; break; }
-        else if (dist < 0.05) { proximityScore += 3; break; }
+        if (dist < 0.03) {
+          proximityScore += 5;
+          break;
+        } else if (dist < 0.05) {
+          proximityScore += 3;
+          break;
+        }
       }
       for (const r of resistances) {
         const dist = Math.abs(price - r) / price;
-        if (dist < 0.03) { proximityScore += 5; break; }
-        else if (dist < 0.05) { proximityScore += 3; break; }
+        if (dist < 0.03) {
+          proximityScore += 5;
+          break;
+        } else if (dist < 0.05) {
+          proximityScore += 3;
+          break;
+        }
       }
     }
     proximityScore = Math.min(proximityScore, 10);
@@ -72,8 +93,16 @@ describe('Screener scoring algorithm', () => {
     else if (vixPrice > 25 && vixPrice <= 35) volatilityScore = 4;
     else if (vixPrice > 35) volatilityScore = 2;
 
-    const total = volumeSurge + technicalScore + momentumScore + proximityScore +
-      newsScore + sectorScore + fiiDiiScore + globalScore + volatilityScore;
+    const total =
+      volumeSurge +
+      technicalScore +
+      momentumScore +
+      proximityScore +
+      newsScore +
+      sectorScore +
+      fiiDiiScore +
+      globalScore +
+      volatilityScore;
     return Math.round(Math.min(total, 100) * 100) / 100;
   }
 
@@ -96,8 +125,14 @@ describe('Screener scoring algorithm', () => {
   });
 
   test('oversold RSI + bullish crossover = high momentum', () => {
-    const neutral = computeTestScore({ rsiSignal: 'neutral', macdTrend: 'neutral' });
-    const bullish = computeTestScore({ rsiSignal: 'oversold', macdTrend: 'bullish_crossover' });
+    const neutral = computeTestScore({
+      rsiSignal: 'neutral',
+      macdTrend: 'neutral',
+    });
+    const bullish = computeTestScore({
+      rsiSignal: 'oversold',
+      macdTrend: 'bullish_crossover',
+    });
     expect(bullish).toBeGreaterThan(neutral);
   });
 
@@ -114,14 +149,23 @@ describe('Screener scoring algorithm', () => {
   });
 
   test('hot sector boosts score', () => {
-    const coldSector = computeTestScore({ sectorMomentum: -80, sectorRank: 11 });
+    const coldSector = computeTestScore({
+      sectorMomentum: -80,
+      sectorRank: 11,
+    });
     const hotSector = computeTestScore({ sectorMomentum: 80, sectorRank: 1 });
     expect(hotSector).toBeGreaterThan(coldSector);
   });
 
   test('FII buying boosts score', () => {
-    const selling = computeTestScore({ fiiSignal: 'SELLING', fiiSentiment: 'BEARISH' });
-    const buying = computeTestScore({ fiiSignal: 'BUYING', fiiSentiment: 'BULLISH' });
+    const selling = computeTestScore({
+      fiiSignal: 'SELLING',
+      fiiSentiment: 'BEARISH',
+    });
+    const buying = computeTestScore({
+      fiiSignal: 'BUYING',
+      fiiSentiment: 'BULLISH',
+    });
     expect(buying).toBeGreaterThan(selling);
   });
 
@@ -139,11 +183,21 @@ describe('Screener scoring algorithm', () => {
 
   test('score capped at 100', () => {
     const maxScore = computeTestScore({
-      volRatio: 5, techScore: 100, rsiSignal: 'oversold',
-      macdTrend: 'bullish_crossover', supports: [99], resistances: [101],
-      price: 100, newsCount: 10, sectorMomentum: 100, sectorRank: 1,
-      fiiSignal: 'BUYING', diiSignal: 'BUYING', fiiSentiment: 'BULLISH',
-      globalSentiment: 100, vixPrice: 20,
+      volRatio: 5,
+      techScore: 100,
+      rsiSignal: 'oversold',
+      macdTrend: 'bullish_crossover',
+      supports: [99],
+      resistances: [101],
+      price: 100,
+      newsCount: 10,
+      sectorMomentum: 100,
+      sectorRank: 1,
+      fiiSignal: 'BUYING',
+      diiSignal: 'BUYING',
+      fiiSentiment: 'BULLISH',
+      globalSentiment: 100,
+      vixPrice: 20,
     });
     expect(maxScore).toBeLessThanOrEqual(100);
   });
@@ -152,8 +206,11 @@ describe('Screener scoring algorithm', () => {
 describe('Recommendation derivation', () => {
   function deriveTestRecommendation(params) {
     const {
-      overallSignal = 'NEUTRAL', sectorTrend = null, sectorRank = 6,
-      fiiSentiment = null, globalSentiment = null,
+      overallSignal = 'NEUTRAL',
+      sectorTrend = null,
+      sectorRank = 6,
+      fiiSentiment = null,
+      globalSentiment = null,
     } = params;
 
     let points = 0;
@@ -179,40 +236,54 @@ describe('Recommendation derivation', () => {
   }
 
   test('STRONG_BUY alone = CALL', () => {
-    expect(deriveTestRecommendation({ overallSignal: 'STRONG_BUY' })).toBe('CALL');
+    expect(deriveTestRecommendation({ overallSignal: 'STRONG_BUY' })).toBe(
+      'CALL',
+    );
   });
 
   test('STRONG_SELL alone = PUT', () => {
-    expect(deriveTestRecommendation({ overallSignal: 'STRONG_SELL' })).toBe('PUT');
+    expect(deriveTestRecommendation({ overallSignal: 'STRONG_SELL' })).toBe(
+      'PUT',
+    );
   });
 
   test('BUY + hot sector = CALL', () => {
-    expect(deriveTestRecommendation({
-      overallSignal: 'BUY', sectorTrend: 'strong_up', sectorRank: 2,
-    })).toBe('CALL');
+    expect(
+      deriveTestRecommendation({
+        overallSignal: 'BUY',
+        sectorTrend: 'strong_up',
+        sectorRank: 2,
+      }),
+    ).toBe('CALL');
   });
 
   test('NEUTRAL with no signals = NEUTRAL', () => {
-    expect(deriveTestRecommendation({ overallSignal: 'NEUTRAL' })).toBe('NEUTRAL');
+    expect(deriveTestRecommendation({ overallSignal: 'NEUTRAL' })).toBe(
+      'NEUTRAL',
+    );
   });
 
   test('weak BUY with bearish everything = NEUTRAL', () => {
-    expect(deriveTestRecommendation({
-      overallSignal: 'BUY', // +2
-      sectorTrend: 'strong_down', // -1
-      sectorRank: 11, // -1
-      fiiSentiment: 'BEARISH', // -1
-      globalSentiment: 'BEARISH', // -1
-    })).toBe('PUT'); // net: 2-1-1-1-1 = -2
+    expect(
+      deriveTestRecommendation({
+        overallSignal: 'BUY', // +2
+        sectorTrend: 'strong_down', // -1
+        sectorRank: 11, // -1
+        fiiSentiment: 'BEARISH', // -1
+        globalSentiment: 'BEARISH', // -1
+      }),
+    ).toBe('PUT'); // net: 2-1-1-1-1 = -2
   });
 
   test('all bullish signals align = CALL', () => {
-    expect(deriveTestRecommendation({
-      overallSignal: 'BUY',
-      sectorTrend: 'strong_up',
-      sectorRank: 1,
-      fiiSentiment: 'BULLISH',
-      globalSentiment: 'BULLISH',
-    })).toBe('CALL');
+    expect(
+      deriveTestRecommendation({
+        overallSignal: 'BUY',
+        sectorTrend: 'strong_up',
+        sectorRank: 1,
+        fiiSentiment: 'BULLISH',
+        globalSentiment: 'BULLISH',
+      }),
+    ).toBe('CALL');
   });
 });

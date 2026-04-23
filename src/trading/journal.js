@@ -39,16 +39,22 @@ export function createJournalEntry(trade) {
   initJournalTable();
 
   // Check if entry already exists
-  const existing = db.prepare('SELECT id FROM trade_journal WHERE trade_id = ?').get(trade.id);
+  const existing = db
+    .prepare('SELECT id FROM trade_journal WHERE trade_id = ?')
+    .get(trade.id);
   if (existing) return existing;
 
-  const holdingTime = trade.exited_at && trade.entered_at
-    ? Math.round((new Date(trade.exited_at) - new Date(trade.entered_at)) / 3600000)
-    : null;
+  const holdingTime =
+    trade.exited_at && trade.entered_at
+      ? Math.round(
+          (new Date(trade.exited_at) - new Date(trade.entered_at)) / 3600000,
+        )
+      : null;
 
-  const pnlPct = trade.capital_used > 0
-    ? ((trade.pnl || 0) / trade.capital_used * 100).toFixed(1)
-    : '0';
+  const pnlPct =
+    trade.capital_used > 0
+      ? (((trade.pnl || 0) / trade.capital_used) * 100).toFixed(1)
+      : '0';
 
   const autoNotes = [
     `${trade.type || 'Unknown'} trade on ${trade.symbol}`,
@@ -59,13 +65,23 @@ export function createJournalEntry(trade) {
     holdingTime ? `Holding time: ${holdingTime}h` : null,
     trade.t1_hit ? 'T1 was hit ✓' : 'T1 not reached',
     trade.t2_hit ? 'T2 was hit ✓' : null,
-  ].filter(Boolean).join('\n');
+  ]
+    .filter(Boolean)
+    .join('\n');
 
   const tags = [
-    trade.status === 'STOPPED' ? 'stop-loss' : trade.pnl > 0 ? 'winner' : 'loser',
+    trade.status === 'STOPPED'
+      ? 'stop-loss'
+      : trade.pnl > 0
+        ? 'winner'
+        : 'loser',
     (trade.type || 'unknown').toLowerCase(),
     trade.t1_hit ? 'target-hit' : 'no-target',
-    holdingTime && holdingTime < 2 ? 'scalp' : holdingTime && holdingTime > 24 ? 'swing' : 'intraday',
+    holdingTime && holdingTime < 2
+      ? 'scalp'
+      : holdingTime && holdingTime > 24
+        ? 'swing'
+        : 'intraday',
   ].join(',');
 
   const stmt = db.prepare(`
@@ -87,7 +103,9 @@ export function createJournalEntry(trade) {
     tags,
   });
 
-  return db.prepare('SELECT * FROM trade_journal WHERE id = ?').get(result.lastInsertRowid);
+  return db
+    .prepare('SELECT * FROM trade_journal WHERE id = ?')
+    .get(result.lastInsertRowid);
 }
 
 /**
@@ -129,16 +147,33 @@ export function updateJournalEntry(id, updates) {
   const sets = [];
   const params = { id };
 
-  if (updates.notes != null) { sets.push('notes = @notes'); params.notes = updates.notes; }
-  if (updates.rating != null) { sets.push('rating = @rating'); params.rating = updates.rating; }
-  if (updates.lessons != null) { sets.push('lessons = @lessons'); params.lessons = updates.lessons; }
-  if (updates.ai_review != null) { sets.push('ai_review = @aiReview'); params.aiReview = updates.ai_review; }
-  if (updates.tags != null) { sets.push('tags = @tags'); params.tags = updates.tags; }
+  if (updates.notes != null) {
+    sets.push('notes = @notes');
+    params.notes = updates.notes;
+  }
+  if (updates.rating != null) {
+    sets.push('rating = @rating');
+    params.rating = updates.rating;
+  }
+  if (updates.lessons != null) {
+    sets.push('lessons = @lessons');
+    params.lessons = updates.lessons;
+  }
+  if (updates.ai_review != null) {
+    sets.push('ai_review = @aiReview');
+    params.aiReview = updates.ai_review;
+  }
+  if (updates.tags != null) {
+    sets.push('tags = @tags');
+    params.tags = updates.tags;
+  }
 
   if (!sets.length) return;
 
   sets.push("updated_at = datetime('now', '+5 hours', '+30 minutes')");
-  db.prepare(`UPDATE trade_journal SET ${sets.join(', ')} WHERE id = @id`).run(params);
+  db.prepare(`UPDATE trade_journal SET ${sets.join(', ')} WHERE id = @id`).run(
+    params,
+  );
 }
 
 /**
@@ -150,17 +185,23 @@ export function getJournalStats(days = 30) {
   const db = getDb();
   initJournalTable();
 
-  const entries = db.prepare(`
+  const entries = db
+    .prepare(
+      `
     SELECT pnl, tags, rating FROM trade_journal
     WHERE created_at >= datetime('now', '+5 hours', '+30 minutes', '-${days} days')
-  `).all();
+  `,
+    )
+    .all();
 
   if (!entries.length) {
     return { totalEntries: 0, avgRating: 0, topLessons: [], tagBreakdown: {} };
   }
 
   const ratings = entries.filter(e => e.rating).map(e => e.rating);
-  const avgRating = ratings.length ? (ratings.reduce((s, r) => s + r, 0) / ratings.length).toFixed(1) : 0;
+  const avgRating = ratings.length
+    ? (ratings.reduce((s, r) => s + r, 0) / ratings.length).toFixed(1)
+    : 0;
 
   const tagCounts = {};
   for (const e of entries) {
@@ -188,16 +229,22 @@ export function autoJournalRecentTrades() {
   const db = getDb();
   initJournalTable();
 
-  const closedTrades = db.prepare(`
+  const closedTrades = db
+    .prepare(
+      `
     SELECT * FROM trades
     WHERE status IN ('CLOSED', 'STOPPED')
       AND exited_at >= datetime('now', '+5 hours', '+30 minutes', '-1 day')
     ORDER BY exited_at DESC
-  `).all();
+  `,
+    )
+    .all();
 
   let created = 0;
   for (const trade of closedTrades) {
-    const existing = db.prepare('SELECT id FROM trade_journal WHERE trade_id = ?').get(trade.id);
+    const existing = db
+      .prepare('SELECT id FROM trade_journal WHERE trade_id = ?')
+      .get(trade.id);
     if (!existing) {
       createJournalEntry(trade);
       created++;

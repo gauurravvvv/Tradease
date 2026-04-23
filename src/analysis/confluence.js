@@ -49,12 +49,14 @@ export async function computeConfluence(symbol, direction) {
   if (allAligned) rawScore += 15;
 
   // Penalty: daily opposes while lower timeframes agree
-  const dailyOpposed = breakdown.daily?.signal !== 'unavailable'
-    && !signalAligns(breakdown.daily?.signal, direction)
-    && breakdown.daily?.signal !== 'NEUTRAL';
+  const dailyOpposed =
+    breakdown.daily?.signal !== 'unavailable' &&
+    !signalAligns(breakdown.daily?.signal, direction) &&
+    breakdown.daily?.signal !== 'NEUTRAL';
 
   const lowerAligned = ['hourly', 'fifteenMin'].every(
-    tf => breakdown[tf]?.signal && signalAligns(breakdown[tf].signal, direction),
+    tf =>
+      breakdown[tf]?.signal && signalAligns(breakdown[tf].signal, direction),
   );
 
   if (dailyOpposed && lowerAligned) rawScore -= 20;
@@ -79,7 +81,12 @@ export async function batchConfluence(candidates) {
     if (results[i].status === 'fulfilled') {
       output[c.symbol] = results[i].value;
     } else {
-      output[c.symbol] = { score: 50, breakdown: {}, allAligned: false, dailyOpposed: false };
+      output[c.symbol] = {
+        score: 50,
+        breakdown: {},
+        allAligned: false,
+        dailyOpposed: false,
+      };
     }
   });
   return output;

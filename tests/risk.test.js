@@ -112,7 +112,7 @@ describe('validateTrade', () => {
   test('valid trade passes (or rejected by market hours)', () => {
     const result = validateTrade(
       { symbol: 'RELIANCE', capitalRequired: 30000, type: 'CALL' },
-      basePortfolio
+      basePortfolio,
     );
     // After 15:00 IST, no new entries allowed — that's a valid rejection
     const now = new Date();
@@ -132,7 +132,7 @@ describe('validateTrade', () => {
     };
     const result = validateTrade(
       { symbol: 'D', capitalRequired: 10000, type: 'CALL' },
-      portfolio
+      portfolio,
     );
     expect(result.valid).toBe(false);
     expect(result.reason).toMatch(/Max positions/);
@@ -142,7 +142,7 @@ describe('validateTrade', () => {
     const portfolio = { ...basePortfolio, capitalUsed: 190000 };
     const result = validateTrade(
       { symbol: 'X', capitalRequired: 20000, type: 'CALL' },
-      portfolio
+      portfolio,
     );
     expect(result.valid).toBe(false);
     expect(result.reason).toMatch(/Insufficient capital/);
@@ -155,7 +155,7 @@ describe('validateTrade', () => {
     };
     const result = validateTrade(
       { symbol: 'RELIANCE', capitalRequired: 10000, type: 'CALL' },
-      portfolio
+      portfolio,
     );
     expect(result.valid).toBe(false);
     expect(result.reason).toMatch(/Already have/);
@@ -164,35 +164,68 @@ describe('validateTrade', () => {
 
 describe('shouldExit', () => {
   test('triggers stop-loss for CALL', () => {
-    const trade = { entryPrice: 100, stopLoss: 90, target1: 120, target2: 130, type: 'CALL' };
+    const trade = {
+      entryPrice: 100,
+      stopLoss: 90,
+      target1: 120,
+      target2: 130,
+      type: 'CALL',
+    };
     const result = shouldExit(trade, 89, 5);
     expect(result.shouldExit).toBe(true);
     expect(result.action).toBe('FULL_EXIT');
   });
 
   test('triggers stop-loss for PUT', () => {
-    const trade = { entryPrice: 100, stopLoss: 110, target1: 80, target2: 70, type: 'PUT' };
+    const trade = {
+      entryPrice: 100,
+      stopLoss: 110,
+      target1: 80,
+      target2: 70,
+      type: 'PUT',
+    };
     const result = shouldExit(trade, 111, 5);
     expect(result.shouldExit).toBe(true);
     expect(result.action).toBe('FULL_EXIT');
   });
 
   test('triggers T1 partial exit for CALL', () => {
-    const trade = { entryPrice: 100, stopLoss: 90, target1: 120, target2: 130, type: 'CALL', t1Hit: false };
+    const trade = {
+      entryPrice: 100,
+      stopLoss: 90,
+      target1: 120,
+      target2: 130,
+      type: 'CALL',
+      t1Hit: false,
+    };
     const result = shouldExit(trade, 121, 5);
     expect(result.shouldExit).toBe(true);
     expect(result.action).toBe('PARTIAL_T1');
   });
 
   test('triggers T2 for CALL', () => {
-    const trade = { entryPrice: 100, stopLoss: 90, target1: 120, target2: 130, type: 'CALL', t1Hit: true };
+    const trade = {
+      entryPrice: 100,
+      stopLoss: 90,
+      target1: 120,
+      target2: 130,
+      type: 'CALL',
+      t1Hit: true,
+    };
     const result = shouldExit(trade, 131, 5);
     expect(result.shouldExit).toBe(true);
     expect(result.action).toBe('PARTIAL_T2');
   });
 
   test('holds when within parameters', () => {
-    const trade = { entryPrice: 100, stopLoss: 90, target1: 120, target2: 130, type: 'CALL', t1Hit: false };
+    const trade = {
+      entryPrice: 100,
+      stopLoss: 90,
+      target1: 120,
+      target2: 130,
+      type: 'CALL',
+      t1Hit: false,
+    };
     const result = shouldExit(trade, 105, 5);
     expect(result.shouldExit).toBe(false);
     expect(result.action).toBe('HOLD');

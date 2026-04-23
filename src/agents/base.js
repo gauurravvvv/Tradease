@@ -1,5 +1,6 @@
 import { getDb } from '../db/sqlite.js';
 import { askClaude } from '../analysis/claude.js';
+import { clearMarketCache } from '../data/market.js';
 import { logger } from '../utils/logger.js';
 
 /**
@@ -19,21 +20,56 @@ export class BaseAgent {
     this.model = model;
     this._timer = null;
     this._running = false;
-    this._stats = { runs: 0, skipped: 0, errors: 0, claudeCalls: 0, totalTokens: 0 };
+    this._stats = {
+      runs: 0,
+      skipped: 0,
+      errors: 0,
+      claudeCalls: 0,
+      totalTokens: 0,
+    };
     this._lastRun = 0;
+    this._lastTickTime = 0;
     this._enabled = true;
   }
 
   /** Override: return true if agent should execute this tick */
-  shouldRun() { return true; }
+  shouldRun() {
+    return true;
+  }
 
   /** Override: main agent logic */
-  async execute() { throw new Error('execute() not implemented'); }
+  async execute() {
+    throw new Error('execute() not implemented');
+  }
 
   async tick() {
     if (this._running || !this._enabled) return;
     this._running = true;
     try {
+      // Detect sleep/suspend gaps
+      const now = Date.now();
+      if (this._lastTickTime > 0) {
+        const gap = now - this._lastTickTime;
+        const expectedGap = this.intervalMs * 2.5;
+        if (gap > expectedGap) {
+          const gapMin = Math.round(gap / 60000);
+          logger.warn(
+            `[${this.name}] Detected ${gapMin}m gap (system sleep?). Resuming.`,
+          );
+          this.log(
+            'wake_recovery',
+            null,
+            `Resumed after ${gapMin}m gap (expected ${Math.round(this.intervalMs / 60000)}m interval)`,
+          );
+          try {
+            clearMarketCache();
+          } catch {
+            /* non-critical */
+          }
+        }
+      }
+      this._lastTickTime = now;
+
       if (!this.shouldRun()) {
         this._stats.skipped++;
         return;
@@ -52,6 +88,8 @@ export class BaseAgent {
 
   start() {
     logger.info(`[${this.name}] Started (every ${this.intervalMs / 1000}s)`);
+    this._lastTickTime = Date.now();
+    this.log('started', null, `interval=${this.intervalMs / 1000}s`);
     this.tick();
     this._timer = setInterval(() => this.tick(), this.intervalMs);
   }
@@ -62,8 +100,12 @@ export class BaseAgent {
     logger.info(`[${this.name}] Stopped`);
   }
 
-  enable() { this._enabled = true; }
-  disable() { this._enabled = false; }
+  enable() {
+    this._enabled = true;
+  }
+  disable() {
+    this._enabled = false;
+  }
 
   /**
    * Call Claude with token caps and model selection.
@@ -78,14 +120,25 @@ export class BaseAgent {
     const tokensIn = Math.ceil(prompt.length / 4);
     const tokensOut = Math.ceil(response.length / 4);
     this._stats.totalTokens += tokensIn + tokensOut;
-    this.log('claude_call', null, `in:${tokensIn} out:${tokensOut}`, tokensIn, tokensOut);
+    this.log(
+      'claude_call',
+      null,
+      `in:${tokensIn} out:${tokensOut}`,
+      tokensIn,
+      tokensOut,
+    );
     return response;
   }
 
   /** Parse Claude response as JSON, stripping markdown fences */
   parseJson(raw) {
-    const cleaned = raw.replace(/```json?\s*/g, '').replace(/```/g, '').trim();
-    try { return JSON.parse(cleaned); } catch {
+    const cleaned = raw
+      .replace(/```json?\s*/g, '')
+      .replace(/```/g, '')
+      .trim();
+    try {
+      return JSON.parse(cleaned);
+    } catch {
       // Try extracting first JSON array/object
       const m = cleaned.match(/[\[{][\s\S]*[\]}]/);
       if (m) return JSON.parse(m[0]);
@@ -98,7 +151,7 @@ export class BaseAgent {
   writeSignal(symbol, signalType, confidence, data = {}) {
     const db = getDb();
     db.prepare(
-      'INSERT INTO agent_signals (agent, symbol, signal_type, confidence, data) VALUES (?, ?, ?, ?, ?)'
+      'INSERT INTO agent_signals (agent, symbol, signal_type, confidence, data) VALUES (?, ?, ?, ?, ?)',
     ).run(this.name, symbol, signalType, confidence, JSON.stringify(data));
   }
 
@@ -106,11 +159,17 @@ export class BaseAgent {
     const db = getDb();
     if (signalTypes) {
       const ph = signalTypes.map(() => '?').join(',');
-      return db.prepare(
-        `SELECT * FROM agent_signals WHERE consumed = 0 AND signal_type IN (${ph}) ORDER BY created_at DESC`
-      ).all(...signalTypes);
+      return db
+        .prepare(
+          `SELECT * FROM agent_signals WHERE consumed = 0 AND signal_type IN (${ph}) ORDER BY created_at DESC`,
+        )
+        .all(...signalTypes);
     }
-    return db.prepare('SELECT * FROM agent_signals WHERE consumed = 0 ORDER BY created_at DESC').all();
+    return db
+      .prepare(
+        'SELECT * FROM agent_signals WHERE consumed = 0 ORDER BY created_at DESC',
+      )
+      .all();
   }
 
   consumeSignals(ids) {
@@ -118,35 +177,48 @@ export class BaseAgent {
     const db = getDb();
     const ph = ids.map(() => '?').join(',');
     db.prepare(
-      `UPDATE agent_signals SET consumed = 1, consumed_by = ?, consumed_at = datetime('now', '+5 hours', '+30 minutes') WHERE id IN (${ph})`
+      `UPDATE agent_signals SET consumed = 1, consumed_by = ?, consumed_at = datetime('now', '+5 hours', '+30 minutes') WHERE id IN (${ph})`,
     ).run(this.name, ...ids);
   }
 
   // ── Logging ──
 
-  log(action, symbol = null, details = null, tokensIn = 0, tokensOut = 0, skipped = 0) {
+  log(
+    action,
+    symbol = null,
+    details = null,
+    tokensIn = 0,
+    tokensOut = 0,
+    skipped = 0,
+  ) {
     try {
       const db = getDb();
       db.prepare(
-        'INSERT INTO agent_logs (agent, action, symbol, details, tokens_in, tokens_out, skipped) VALUES (?, ?, ?, ?, ?, ?, ?)'
+        'INSERT INTO agent_logs (agent, action, symbol, details, tokens_in, tokens_out, skipped) VALUES (?, ?, ?, ?, ?, ?, ?)',
       ).run(this.name, action, symbol, details, tokensIn, tokensOut, skipped);
-    } catch { /* logging should never crash agent */ }
+    } catch {
+      /* logging should never crash agent */
+    }
   }
 
   // ── Market Hours ──
 
   isMarketHours(startHour = 9, startMin = 0, endHour = 15, endMin = 30) {
     const now = new Date();
-    const ist = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+    const ist = new Date(
+      now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }),
+    );
     const day = ist.getDay();
     if (day === 0 || day === 6) return false;
     const mins = ist.getHours() * 60 + ist.getMinutes();
-    return mins >= (startHour * 60 + startMin) && mins <= (endHour * 60 + endMin);
+    return mins >= startHour * 60 + startMin && mins <= endHour * 60 + endMin;
   }
 
   getISTMinutes() {
     const now = new Date();
-    const ist = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+    const ist = new Date(
+      now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }),
+    );
     return ist.getHours() * 60 + ist.getMinutes();
   }
 

@@ -18,20 +18,26 @@ export class Scheduler {
    */
   registerJob(name, cronExpression, handler) {
     if (!cron.validate(cronExpression)) {
-      throw new Error(`Invalid cron expression for "${name}": ${cronExpression}`);
+      throw new Error(
+        `Invalid cron expression for "${name}": ${cronExpression}`,
+      );
     }
 
-    const task = cron.schedule(cronExpression, async () => {
-      const ts = new Date().toLocaleTimeString('en-IN');
-      console.log(`[cron] Running "${name}" @ ${ts}`);
-      try {
-        await handler();
-      } catch (err) {
-        console.error(`[cron] "${name}" failed: ${err.message}`);
-      }
-    }, {
-      scheduled: false, // Don't start until start() called
-    });
+    const task = cron.schedule(
+      cronExpression,
+      async () => {
+        const ts = new Date().toLocaleTimeString('en-IN');
+        console.log(`[cron] Running "${name}" @ ${ts}`);
+        try {
+          await handler();
+        } catch (err) {
+          console.error(`[cron] "${name}" failed: ${err.message}`);
+        }
+      },
+      {
+        scheduled: false, // Don't start until start() called
+      },
+    );
 
     this.jobs.push({ name, cronExpression, task });
     console.log(`[cron] Registered "${name}" → ${cronExpression}`);
@@ -65,13 +71,41 @@ export class Scheduler {
    */
   registerAllJobs(handlers) {
     const jobDefs = [
-      { name: 'Pre-Market Scan',   schedule: SCHEDULE.PRE_MARKET_SCAN,   handler: handlers.preMarketScan },
-      { name: 'Market Open Check',  schedule: SCHEDULE.MARKET_OPEN_CHECK, handler: handlers.marketOpenCheck },
-      { name: 'Trade Execution',    schedule: SCHEDULE.TRADE_EXECUTION,   handler: handlers.tradeExecution },
-      { name: 'Market Pulse',       schedule: SCHEDULE.MARKET_PULSE,      handler: handlers.marketPulse },
-      { name: 'Position Monitor',   schedule: SCHEDULE.POSITION_MONITOR,  handler: handlers.positionMonitor },
-      { name: 'Wind Down',          schedule: SCHEDULE.WIND_DOWN,         handler: handlers.windDown },
-      { name: 'Post Market',        schedule: SCHEDULE.POST_MARKET,       handler: handlers.postMarket },
+      {
+        name: 'Pre-Market Scan',
+        schedule: SCHEDULE.PRE_MARKET_SCAN,
+        handler: handlers.preMarketScan,
+      },
+      {
+        name: 'Market Open Check',
+        schedule: SCHEDULE.MARKET_OPEN_CHECK,
+        handler: handlers.marketOpenCheck,
+      },
+      {
+        name: 'Trade Execution',
+        schedule: SCHEDULE.TRADE_EXECUTION,
+        handler: handlers.tradeExecution,
+      },
+      {
+        name: 'Market Pulse',
+        schedule: SCHEDULE.MARKET_PULSE,
+        handler: handlers.marketPulse,
+      },
+      {
+        name: 'Position Monitor',
+        schedule: SCHEDULE.POSITION_MONITOR,
+        handler: handlers.positionMonitor,
+      },
+      {
+        name: 'Wind Down',
+        schedule: SCHEDULE.WIND_DOWN,
+        handler: handlers.windDown,
+      },
+      {
+        name: 'Post Market',
+        schedule: SCHEDULE.POST_MARKET,
+        handler: handlers.postMarket,
+      },
     ];
 
     for (const { name, schedule, handler } of jobDefs) {

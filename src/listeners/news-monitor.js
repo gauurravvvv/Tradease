@@ -6,18 +6,28 @@ import { getStockNews } from '../data/news.js';
  */
 const NEGATIVE_KEYWORDS = [
   // Strong negative (-2)
-  { pattern: /fraud|scam|sebi action|penalty|ban|downgrade|default|bankrupt/i, weight: -2 },
+  {
+    pattern: /fraud|scam|sebi action|penalty|ban|downgrade|default|bankrupt/i,
+    weight: -2,
+  },
   { pattern: /crash|plunge|tank|collapse|selloff|sell-off/i, weight: -2 },
   { pattern: /probe|investigation|raid|arrest|money laundering/i, weight: -2 },
   // Mild negative (-1)
-  { pattern: /miss|disappoint|below estimate|weak|concern|risk|warning|caution/i, weight: -1 },
+  {
+    pattern:
+      /miss|disappoint|below estimate|weak|concern|risk|warning|caution/i,
+    weight: -1,
+  },
   { pattern: /decline|drop|fall|slip|slide|pressure|volatile/i, weight: -1 },
   { pattern: /downtrend|bearish|resistance|breakdown|sell/i, weight: -1 },
 ];
 
 const POSITIVE_KEYWORDS = [
   { pattern: /beat|exceed|surge|rally|bullish|upgrade|outperform/i, weight: 1 },
-  { pattern: /record high|all-time high|breakout|strong buy|accumulate/i, weight: 2 },
+  {
+    pattern: /record high|all-time high|breakout|strong buy|accumulate/i,
+    weight: 2,
+  },
   { pattern: /dividend|bonus|buyback|expansion|order win/i, weight: 1 },
 ];
 
@@ -68,12 +78,14 @@ export async function checkNewsForPositions(openTrades) {
     symbolMap.get(trade.symbol).push(trade);
   }
 
-  const newsPromises = [...symbolMap.keys()].map(async (symbol) => {
+  const newsPromises = [...symbolMap.keys()].map(async symbol => {
     try {
       const news = await getStockNews(symbol);
       return { symbol, news };
     } catch (err) {
-      console.error(`[news-monitor] Failed to fetch news for ${symbol}: ${err.message}`);
+      console.error(
+        `[news-monitor] Failed to fetch news for ${symbol}: ${err.message}`,
+      );
       return { symbol, news: [] };
     }
   });
@@ -98,8 +110,12 @@ export async function checkNewsForPositions(openTrades) {
 
     // Alert if overall sentiment is negative and we're in a CALL,
     // or positive and we're in a PUT (contrarian signal)
-    const bearishAlert = (sentiment === 'negative' || sentiment === 'very_negative') && trade.type === 'CALL';
-    const bullishAlert = (sentiment === 'positive' || sentiment === 'very_positive') && trade.type === 'PUT';
+    const bearishAlert =
+      (sentiment === 'negative' || sentiment === 'very_negative') &&
+      trade.type === 'CALL';
+    const bullishAlert =
+      (sentiment === 'positive' || sentiment === 'very_positive') &&
+      trade.type === 'PUT';
     const alert = bearishAlert || bullishAlert;
 
     results.push({
