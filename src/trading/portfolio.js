@@ -157,9 +157,9 @@ export function getPerformanceStats(days = 30) {
   const avgWin = winners.length > 0 ? grossWin / winners.length : 0;
   const avgLoss = losers.length > 0 ? grossLoss / losers.length : 0;
 
-  // Profit factor (guard division by zero)
+  // Profit factor (guard division by zero, cap to 999)
   const profitFactor =
-    grossLoss > 0 ? grossWin / grossLoss : grossWin > 0 ? Infinity : 0;
+    grossLoss > 0 ? grossWin / grossLoss : grossWin > 0 ? 999 : 0;
 
   // Max drawdown: walk through trades chronologically and track peak-to-trough
   const chronological = [...trades].reverse(); // oldest first
@@ -187,8 +187,7 @@ export function getPerformanceStats(days = 30) {
     winRate: Math.round((winners.length / total) * 10000) / 100, // e.g. 66.67
     avgWin: Math.round(avgWin * 100) / 100,
     avgLoss: Math.round(avgLoss * 100) / 100,
-    profitFactor:
-      profitFactor === Infinity ? 'Inf' : Math.round(profitFactor * 100) / 100,
+    profitFactor: Math.round(profitFactor * 100) / 100,
     maxDrawdown: Math.round(maxDrawdown * 100) / 100,
     totalPnl: Math.round(totalPnl * 100) / 100,
     bestTrade: bestTrade

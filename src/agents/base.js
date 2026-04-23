@@ -156,20 +156,25 @@ export class BaseAgent {
   }
 
   readSignals(signalTypes = null) {
-    const db = getDb();
-    if (signalTypes) {
-      const ph = signalTypes.map(() => '?').join(',');
+    try {
+      const db = getDb();
+      if (signalTypes) {
+        const ph = signalTypes.map(() => '?').join(',');
+        return db
+          .prepare(
+            `SELECT * FROM agent_signals WHERE consumed = 0 AND signal_type IN (${ph}) ORDER BY created_at DESC`,
+          )
+          .all(...signalTypes);
+      }
       return db
         .prepare(
-          `SELECT * FROM agent_signals WHERE consumed = 0 AND signal_type IN (${ph}) ORDER BY created_at DESC`,
+          'SELECT * FROM agent_signals WHERE consumed = 0 ORDER BY created_at DESC',
         )
-        .all(...signalTypes);
+        .all();
+    } catch (err) {
+      logger.error(`[${this.name}] readSignals failed (DB locked?): ${err.message}`);
+      return [];
     }
-    return db
-      .prepare(
-        'SELECT * FROM agent_signals WHERE consumed = 0 ORDER BY created_at DESC',
-      )
-      .all();
   }
 
   consumeSignals(ids) {

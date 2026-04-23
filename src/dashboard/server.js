@@ -536,16 +536,39 @@ export function startDashboard(port = 3777) {
               'Missing required fields: symbol, type, entryPrice, lotSize, stopLoss',
           });
       }
+
+      // Validate numeric inputs
+      const numEntry = Number(entryPrice);
+      const numLot = Number(lotSize);
+      const numSL = Number(stopLoss);
+      const numT1 = target1 ? Number(target1) : null;
+      const numT2 = target2 ? Number(target2) : null;
+      const numConf = Number(confidence || 70);
+
+      if (!Number.isFinite(numEntry) || numEntry <= 0) {
+        return res.status(400).json({ error: 'entryPrice must be a positive number' });
+      }
+      if (!Number.isFinite(numLot) || numLot < 1) {
+        return res.status(400).json({ error: 'lotSize must be >= 1' });
+      }
+      if (!Number.isFinite(numSL) || numSL <= 0) {
+        return res.status(400).json({ error: 'stopLoss must be a positive number' });
+      }
+      const upperType = String(type).toUpperCase();
+      if (upperType !== 'CALL' && upperType !== 'PUT') {
+        return res.status(400).json({ error: 'type must be CALL or PUT' });
+      }
+
       const trade = enterTrade({
         symbol: symbol.toUpperCase(),
-        type: type.toUpperCase(),
-        entryPrice: Number(entryPrice),
-        premium: Number(premium || entryPrice * 0.02),
-        lotSize: Number(lotSize),
-        stopLoss: Number(stopLoss),
-        target1: target1 ? Number(target1) : null,
-        target2: target2 ? Number(target2) : null,
-        confidence: Number(confidence || 70),
+        type: upperType,
+        entryPrice: numEntry,
+        premium: Number(premium || numEntry * 0.02),
+        lotSize: numLot,
+        stopLoss: numSL,
+        target1: numT1,
+        target2: numT2,
+        confidence: numConf,
         reason: reason || 'Manual UI entry',
         expiry,
         strike: strike ? Number(strike) : undefined,
@@ -600,6 +623,9 @@ export function startDashboard(port = 3777) {
         exitPrice = q.price;
       } catch {}
       const pct = Number(percentage || 0.5);
+      if (!Number.isFinite(pct) || pct <= 0 || pct >= 1) {
+        return res.status(400).json({ error: 'percentage must be between 0 and 1 (exclusive)' });
+      }
       partialExit(
         tradeId,
         pct,

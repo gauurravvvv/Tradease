@@ -86,7 +86,16 @@ export class PositionGuardian extends BaseAgent {
   async _manageTrade(trade, signals) {
     // Fetch live price
     const quote = await getQuote(trade.symbol);
-    const price = quote.price;
+    const price = quote?.price;
+
+    // Guard: skip if price is null/undefined/NaN — stale data is dangerous
+    if (price == null || !Number.isFinite(price)) {
+      logger.warn(
+        `[position-guardian] Null/invalid price for ${trade.symbol}, skipping tick`,
+      );
+      this.log('skip_null_price', trade.symbol, `price=${price}`);
+      return;
+    }
 
     // Update DB
     updateTradePrice(trade.id, price);
@@ -317,8 +326,15 @@ export class PositionGuardian extends BaseAgent {
   async _exitAll(trades, reason) {
     for (const trade of trades) {
       try {
-        const quote = await getQuote(trade.symbol);
-        const price = quote.price;
+        let price = trade.current_price || trade.entry_price;
+        try {
+          const quote = await getQuote(trade.symbol);
+          if (quote?.price != null && Number.isFinite(quote.price)) {
+            price = quote.price;
+          }
+        } catch {
+          /* use last known price */
+        }
         const pnl = this._calcPnl(trade, price);
         exitTrade(trade.id, price, reason);
         notifyTradeExit(trade.symbol, trade.type, price, pnl);
@@ -335,6 +351,7 @@ export class PositionGuardian extends BaseAgent {
   // ─── Helpers ───
 
   _calcPnl(trade, price) {
+    if (price == null || !Number.isFinite(price)) return 0;
     const dir = trade.type === 'CALL' ? 1 : -1;
     return dir * (price - trade.entry_price) * trade.quantity;
   }

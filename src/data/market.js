@@ -15,7 +15,8 @@ async function withRetry(fn, { retries = 2, delayMs = 1000, label = '' } = {}) {
       const isLast = attempt === retries;
       const isTransient = /fetch failed|ENOTFOUND|ETIMEDOUT|ECONNRESET|ECONNREFUSED|socket hang up|network/i.test(err.message);
       if (isLast || !isTransient) throw err;
-      const wait = delayMs * Math.pow(2, attempt);
+      const jitter = Math.random() * 500;
+      const wait = delayMs * Math.pow(2, attempt) + jitter;
       logger.debug(`[market] Retry ${attempt + 1}/${retries} for ${label} in ${wait}ms: ${err.message}`);
       await new Promise(r => setTimeout(r, wait));
     }

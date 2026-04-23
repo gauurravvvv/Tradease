@@ -35,6 +35,11 @@ export async function askClaude(prompt, options = {}) {
 
     const timer = setTimeout(() => {
       child.kill('SIGTERM');
+      // Force kill if SIGTERM doesn't work within 5s
+      const forceKill = setTimeout(() => {
+        try { child.kill('SIGKILL'); } catch { /* already dead */ }
+      }, 5000);
+      forceKill.unref();
       reject(new Error(`Claude CLI timed out after ${timeout}ms`));
     }, timeout);
 

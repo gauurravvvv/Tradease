@@ -125,13 +125,17 @@ export class ListenerManager {
             let exitPrice = trade.current_price || trade.entry_price;
             try {
               const q = await getQuote(trade.symbol);
-              exitPrice = q.price;
+              if (q?.price != null && Number.isFinite(q.price)) {
+                exitPrice = q.price;
+              } else {
+                logger.warn(`[listener] Stale price for ${trade.symbol} in emergency exit, using last known ₹${exitPrice}`);
+              }
             } catch {
-              /* use last known */
+              logger.warn(`[listener] Quote failed for ${trade.symbol} in emergency exit, using last known ₹${exitPrice}`);
             }
             const reason = `Emergency exit — index crash (Nifty: ${indexHealth.nifty.changePct?.toFixed(2)}%)`;
             exitTrade(trade.id, exitPrice, reason);
-            logger.trade(`[listener] Exited ${trade.symbol} (emergency)`);
+            logger.trade(`[listener] Exited ${trade.symbol} (emergency) @ ₹${exitPrice}`);
           } catch (err) {
             logger.error(
               `[listener] Failed to exit ${trade.symbol}: ${err.message}`,
